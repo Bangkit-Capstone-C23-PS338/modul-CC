@@ -6,9 +6,15 @@ from typing import List, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from google.cloud import firestore
+from google.oauth2 import service_account
 import uuid
 
 app = FastAPI()
+
+key_path = 'path/service-account-widhy.json'
+
+credentials = service_account.Credentials.from_service_account_file(key_path)
+client = firestore.Client(credentials=credentials)
 
 SECRET_KEY = "inirahasia"  # Replace with your own secret key
 ALGORITHM = "HS256"
