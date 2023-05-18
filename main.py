@@ -6,15 +6,23 @@ from typing import List, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from google.cloud import firestore
-from google.oauth2 import service_account
 import uuid
 
+import os, json
+from dotenv import load_dotenv
+load_dotenv()
+
+CREDENTIALS = json.loads(os.environ.get('CREDENTIALS'))
+
+if os.path.exists('credentials.json'):
+    pass
+else:
+    with open('credentials.json', 'w') as credFile:
+        json.dump(CREDENTIALS, credFile)
+
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'credentials.json'
+
 app = FastAPI()
-
-key_path = 'path/service-account-widhy.json'
-
-credentials = service_account.Credentials.from_service_account_file(key_path)
-client = firestore.Client(credentials=credentials)
 
 SECRET_KEY = "inirahasia"  # Replace with your own secret key
 ALGORITHM = "HS256"
@@ -24,7 +32,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 # Initialize Google Cloud Firestore client
-db = firestore.Client(project='promosee')
+db = firestore.Client(project='promosee-capstone')
 
 # Sample data structures for BusinessOwner and Influencer
 class BusinessOwner(BaseModel):
