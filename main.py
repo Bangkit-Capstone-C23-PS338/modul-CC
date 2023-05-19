@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -88,7 +88,7 @@ def create_access_token(data: dict):
 
 # API endpoints
 @app.post("/register/businessowner")
-async def register_business_owner(business_owner: BusinessOwner):
+async def register_business_owner(business_owner: BusinessOwner = Body(...)):
     # Hash the password
     hashed_password = get_password_hash(business_owner.password)
     business_owner_dict = business_owner.dict()
@@ -104,7 +104,7 @@ async def register_business_owner(business_owner: BusinessOwner):
     return {"message": "Business owner registered successfully"}
 
 @app.post("/register/influencer")
-async def register_influencer(influencer: Influencer):
+async def register_influencer(influencer: Influencer = Body(...)):
     # Hash the password
     hashed_password = get_password_hash(influencer.password)
     influencer_dict = influencer.dict()
