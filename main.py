@@ -7,6 +7,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from google.cloud import firestore
 import uuid
+import secrets
+from datetime import datetime, timedelta
+from typing import Union
 
 import os, json
 from dotenv import load_dotenv
@@ -26,7 +29,7 @@ app = FastAPI()
 
 SECRET_KEY = "inirahasia"  # Replace with your own secret key
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Set the expiration time for the access token (in minutes)
+ACCESS_TOKEN_EXPIRE_MINUTES = 5  # Set the expiration time for the access token (in minutes)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
@@ -68,23 +71,115 @@ def get_user_by_username(username: str, collection_name: str):
         return doc.to_dict()
     return None
 
-def get_user_by_userid(userid: str, collection_name: str):
-    doc_ref = db.collection(collection_name).document(userid)
-    doc = doc_ref.get()
-    if doc.exists:
-        return doc.to_dict()
-    return None
-
 def authenticate_user(username: str, password: str, collection_name: str):
     user = get_user_by_username(username, collection_name)
     if user and verify_password(password, user["password"]):
         return user["userid"], user
     return None, None
 
-def create_access_token(data: dict):
-    to_encode = data.copy()
+# def create_access_token(username: str, user_type: str):
+#     to_encode = {
+#         "sub": username,
+#         "type": user_type
+#     }
+#     print(username,user_type)
+#     unique_id = secrets.token_hex(8)  # Generate a unique identifier
+#     to_encode["jti"] = unique_id  # Add the unique identifier to the token data
+    
+#     expiration_time = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+#     to_encode["exp"] = expiration_time  # Add the expiration time to the token data
+
+#     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+#     return encoded_jwt
+def create_access_token(username: str, user_type: str):
+    to_encode = {
+        "sub": username,
+        "type": user_type
+    }
+    print(username, user_type)
+    unique_id = secrets.token_hex(8)  # Generate a unique identifier
+    to_encode["jti"] = unique_id  # Add the unique identifier to the token data
+
+    expiration_time = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode["exp"] = expiration_time  # Add the expiration time to the token data
+
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+# Token blacklist functions
+token_blacklist = set()
+
+def invalidate_token(token: str):
+    token_blacklist.add(token)
+
+def is_token_blacklisted(token: str):
+    return token in token_blacklist
+
+def is_token_expired(token: str):
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        expiration_timestamp = decoded_token.get("exp")
+        if not expiration_timestamp:
+            return False  # If the expiration time is not present, consider the token as not expired
+        expiration_time = datetime.utcfromtimestamp(expiration_timestamp)
+        current_time = datetime.utcnow()
+        return current_time > expiration_time
+    except JWTError:
+        return True
+
+# Dependency function to verify and validate the token
+# async def get_current_user(token: str = Depends(oauth2_scheme)):
+#     try:
+#         if is_token_blacklisted(token):
+#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        
+#         if is_token_expired(token):
+#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+
+#         # Verify and decode the token
+#         decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+#         username = decoded_token.get("sub")
+#         user_type = decoded_token.get("type")
+#         if not username or not user_type:
+#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+#         # Retrieve the user by username
+#         doc = get_user_by_username(username, "business_owners")
+#         if doc:
+#             doc["user_type"] = user_type
+#             return doc
+
+#         doc = get_user_by_username(username, "influencers")
+#         if doc:
+#             doc["user_type"] = user_type
+#             return doc
+
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+#     except JWTError:
+#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        if is_token_blacklisted(token):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        
+        if is_token_expired(token):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+
+        # Verify and decode the token
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = decoded_token.get("sub")
+        user_type = decoded_token.get("type")
+        if not username or not user_type:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+        return {"sub": username, "type": user_type}  # Return the decoded token as a dictionary
+
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+
 
 # API endpoints
 @app.post("/register/businessowner")
@@ -119,96 +214,111 @@ async def register_influencer(influencer: Influencer = Body(...)):
     doc_ref.set(influencer_dict)
     return {"message": "Influencer registered successfully"}
 
+# @app.post("/login")
+# async def login(username: str = Body(...), password: str = Body(...)):
+#     userid, user = authenticate_user(username, password, "business_owners")
+#     user_type = "business_owner"
+
+#     if not user:
+#         userid, user = authenticate_user(username, password, "influencers")
+#         if not user:
+#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+#         user_type = "influencer"
+
+#     # Generate the access token
+#     access_token = create_access_token(username, user_type)
+
+#     return {"userid": userid, "username": username, "access_token": access_token, "token_type": "bearer", "user_type": user_type}
+
 @app.post("/login")
-async def login(username: str, password: str):
+async def login(username: str = Body(...), password: str = Body(...)):
     userid, user = authenticate_user(username, password, "business_owners")
+    user_type = "business_owner"
+
     if not user:
         userid, user = authenticate_user(username, password, "influencers")
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
-
-    # Create the token data
-    token_data = {"sub": user["username"], "type": user.get("type")}
+        user_type = "influencer"
 
     # Generate the access token
-    access_token = create_access_token(token_data)
+    access_token = create_access_token(username, user_type)
 
-    return {"userid": userid, "username": user["username"], "access_token": access_token, "token_type": "bearer"}
+    return {"userid": userid, "username": username, "access_token": access_token, "token_type": "bearer", "user_type": user_type}
 
-@app.get("/profile/{id}")
-async def get_profile(id: str, token: str = Depends(oauth2_scheme)):
+
+# @app.get("/profile/{username}")
+# async def get_user_by_username_endpoint(username: str, token: str = Depends(get_current_user)):
+#     try:
+#         print("Username from token:", token.get("sub"))
+#         print("user type from token:", token.get("type"))
+#         # Retrieve the user by username
+#         doc_ref = db.collection("business_owners").document(username)
+#         doc = doc_ref.get()
+#         if doc.exists:
+#             return doc.to_dict()
+
+#         doc_ref = db.collection("influencers").document(username)
+#         doc = doc_ref.get()
+#         if doc.exists:
+#             return doc.to_dict()
+
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+#     except JWTError:
+#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+@app.put("/update/{username}")
+async def update_user_profile(username: str, updated_profile: dict, token: str = Depends(get_current_user)):
     try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = decoded_token.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        # Check if the authenticated user is the same as the profile being updated
+        if token.get("sub") != username:
+            print("Username from token:", token.get("sub"))
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this profile")
+            
+        # Determine the collection name based on the type of user
+        user_type = token.get("type")
+        collection_name = "business_owners" if user_type == "business_owner" else "influencers"
 
-        # Retrieve the user profile based on the ID
-        doc_ref = db.collection("business_owners").document(username)
+        # Update the user profile
+        doc_ref = db.collection(collection_name).document(username)
         doc = doc_ref.get()
         if doc.exists:
-            return doc.to_dict()
-
-        doc_ref = db.collection("influencers").document(username)
-        doc = doc_ref.get()
-        if doc.exists:
-            return doc.to_dict()
+            doc_ref.update(updated_profile)
+            return {"message": "Profile updated successfully"}
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-@app.get("/profile/{username}")
-async def get_user_by_username_endpoint(username: str, token: str = Depends(oauth2_scheme)):
+@app.put("/update/{username}")
+async def update_user_profile(username: str, updated_profile: dict, token: str = Depends(get_current_user)):
     try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        auth_username = decoded_token.get("sub")
-        if not auth_username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        # Check if the authenticated user is the same as the profile being updated
+        if token.get("sub") != username:
+            print("Username from token:", token.get("sub"))
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this profile")
+            
+        # Convert the updated_profile to a dictionary excluding None values
+        updated_profile.dict(exclude_unset=True)
 
-        # Retrieve the user by username
-        doc_ref = db.collection("business_owners").document(username)
+        # Determine the collection name based on the type of user
+        user_type = token.get("type")
+        collection_name = "business_owners" if user_type == "business_owner" else "influencers"
+
+        # Update the user profile
+        doc_ref = db.collection(collection_name).document(username)
         doc = doc_ref.get()
         if doc.exists:
-            return doc.to_dict()
-
-        doc_ref = db.collection("influencers").document(username)
-        doc = doc_ref.get()
-        if doc.exists:
-            return doc.to_dict()
+            doc_ref.update(updated_profile)
+            return {"message": "Profile updated successfully"}
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-@app.put("/profile/update/{id}")
-async def update_profile(id: int, token: str = Depends(oauth2_scheme)):
-    try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = decoded_token.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-        # Update the user profile based on the ID
-        # Implement your logic here
-        # You can retrieve the user profile, make modifications, and update the document in Firestore
-
-        return {"message": f"Profile updated for ID: {id}"}
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 @app.get("/getinfluencers")
-async def get_influencers(token: str = Depends(oauth2_scheme)):
+async def get_influencers(token: str = Depends(get_current_user)):
     try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = decoded_token.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
         # Retrieve influencers
         influencers = []
         influencers_ref = db.collection("influencers").stream()
@@ -219,15 +329,9 @@ async def get_influencers(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-@app.get("/getinfluencers/category")
-async def get_influencers_by_category(category: str, token: str = Depends(oauth2_scheme)):
+@app.get("/getinfluencers/{category}")
+async def get_influencers_by_category(category: str, token: str = Depends(get_current_user)):
     try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = decoded_token.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
         # Retrieve influencers by category
         influencers = []
         influencers_ref = db.collection("influencers").where("categories", "array_contains", category).stream()
@@ -238,15 +342,9 @@ async def get_influencers_by_category(category: str, token: str = Depends(oauth2
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-@app.get("/getinfluencers/{username}")
-async def get_influencers_by_username(username: str, token: str = Depends(oauth2_scheme)):
+@app.get("/getinfluencer/{username}")
+async def get_influencers_by_username(username: str, token: str = Depends(get_current_user)):
     try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        auth_username = decoded_token.get("sub")
-        if not auth_username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
         # Retrieve influencers by username
         influencers = []
         influencers_ref = db.collection("influencers").where("username", "==", username).stream()
@@ -257,24 +355,10 @@ async def get_influencers_by_username(username: str, token: str = Depends(oauth2
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-@app.get("/getinfluencers/{id}")
-async def get_influencer_by_id(id: int, token: str = Depends(oauth2_scheme)):
-    try:
-        # Verify and decode the token
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = decoded_token.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-        # Retrieve the influencer by ID
-        doc_ref = db.collection("influencers").document(username)
-        doc = doc_ref.get()
-        if doc.exists:
-            return doc.to_dict()
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Influencer not found")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+@app.post("/logout")
+async def logout(token: str = Depends(oauth2_scheme)):
+    invalidate_token(token)
+    return {"message": "User logged out successfully"}
 
 # Common error handling
 @app.exception_handler(HTTPException)
