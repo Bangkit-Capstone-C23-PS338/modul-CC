@@ -15,6 +15,12 @@ import os, json
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
+import json
+
+# Set the 'CREDENTIALS' environment variable with a valid JSON string
+os.environ['CREDENTIALS'] = '{"key": "value"}'
+
 CREDENTIALS = json.loads(os.environ.get('CREDENTIALS'))
 
 if os.path.exists('credentials.json'):
@@ -29,7 +35,7 @@ app = FastAPI()
 
 SECRET_KEY = "inirahasia"  # Replace with your own secret key
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 5  # Set the expiration time for the access token (in minutes)
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Set the expiration time for the access token (in minutes)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
@@ -56,6 +62,13 @@ class Influencer(BaseModel):
     tt_followers: int
     yt_username: str
     yt_followers: int
+    products: List[str] = []
+    
+class Product(BaseModel):
+    name: str
+    price: float
+    to_do: List[str]
+    social_media_type: str
 
 # User authentication functions
 def verify_password(plain_password, hashed_password):
@@ -77,20 +90,6 @@ def authenticate_user(username: str, password: str, collection_name: str):
         return user["userid"], user
     return None, None
 
-# def create_access_token(username: str, user_type: str):
-#     to_encode = {
-#         "sub": username,
-#         "type": user_type
-#     }
-#     print(username,user_type)
-#     unique_id = secrets.token_hex(8)  # Generate a unique identifier
-#     to_encode["jti"] = unique_id  # Add the unique identifier to the token data
-    
-#     expiration_time = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-#     to_encode["exp"] = expiration_time  # Add the expiration time to the token data
-
-#     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-#     return encoded_jwt
 def create_access_token(username: str, user_type: str):
     to_encode = {
         "sub": username,
@@ -127,37 +126,6 @@ def is_token_expired(token: str):
     except JWTError:
         return True
 
-# Dependency function to verify and validate the token
-# async def get_current_user(token: str = Depends(oauth2_scheme)):
-#     try:
-#         if is_token_blacklisted(token):
-#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        
-#         if is_token_expired(token):
-#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
-
-#         # Verify and decode the token
-#         decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-#         username = decoded_token.get("sub")
-#         user_type = decoded_token.get("type")
-#         if not username or not user_type:
-#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-#         # Retrieve the user by username
-#         doc = get_user_by_username(username, "business_owners")
-#         if doc:
-#             doc["user_type"] = user_type
-#             return doc
-
-#         doc = get_user_by_username(username, "influencers")
-#         if doc:
-#             doc["user_type"] = user_type
-#             return doc
-
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-#     except JWTError:
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         if is_token_blacklisted(token):
@@ -177,9 +145,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-
-
 
 # API endpoints
 @app.post("/register/businessowner")
@@ -214,22 +179,6 @@ async def register_influencer(influencer: Influencer = Body(...)):
     doc_ref.set(influencer_dict)
     return {"message": "Influencer registered successfully"}
 
-# @app.post("/login")
-# async def login(username: str = Body(...), password: str = Body(...)):
-#     userid, user = authenticate_user(username, password, "business_owners")
-#     user_type = "business_owner"
-
-#     if not user:
-#         userid, user = authenticate_user(username, password, "influencers")
-#         if not user:
-#             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
-#         user_type = "influencer"
-
-#     # Generate the access token
-#     access_token = create_access_token(username, user_type)
-
-#     return {"userid": userid, "username": username, "access_token": access_token, "token_type": "bearer", "user_type": user_type}
-
 @app.post("/login")
 async def login(username: str = Body(...), password: str = Body(...)):
     userid, user = authenticate_user(username, password, "business_owners")
@@ -245,27 +194,6 @@ async def login(username: str = Body(...), password: str = Body(...)):
     access_token = create_access_token(username, user_type)
 
     return {"userid": userid, "username": username, "access_token": access_token, "token_type": "bearer", "user_type": user_type}
-
-
-# @app.get("/profile/{username}")
-# async def get_user_by_username_endpoint(username: str, token: str = Depends(get_current_user)):
-#     try:
-#         print("Username from token:", token.get("sub"))
-#         print("user type from token:", token.get("type"))
-#         # Retrieve the user by username
-#         doc_ref = db.collection("business_owners").document(username)
-#         doc = doc_ref.get()
-#         if doc.exists:
-#             return doc.to_dict()
-
-#         doc_ref = db.collection("influencers").document(username)
-#         doc = doc_ref.get()
-#         if doc.exists:
-#             return doc.to_dict()
-
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-#     except JWTError:
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 @app.put("/update/{username}")
 async def update_user_profile(username: str, updated_profile: dict, token: str = Depends(get_current_user)):
@@ -319,6 +247,7 @@ async def update_user_profile(username: str, updated_profile: dict, token: str =
 @app.get("/getinfluencers")
 async def get_influencers(token: str = Depends(get_current_user)):
     try:
+        print(token.get("sub"), token.get("type"))
         # Retrieve influencers
         influencers = []
         influencers_ref = db.collection("influencers").stream()
@@ -354,6 +283,183 @@ async def get_influencers_by_username(username: str, token: str = Depends(get_cu
         return {"influencers": influencers}
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    
+@app.post("/influencers/{username}/products")
+async def add_product_to_influencer(
+    username: str,
+    product: Product,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Check if the authenticated user is a business owner
+        if token.get("type") != "influencer":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to add products"
+            )
+
+        # Check if the authenticated user's username matches the influencer's username
+        if token.get("sub") != username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to add products to this influencer"
+            )
+
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            # Add the 'products' key to the influencer's data if it doesn't exist
+            if "products" not in influencer:
+                influencer["products"] = []
+            # Add the product to the influencer's products list
+            product_dict = product.dict()
+            influencer["products"].append(product_dict)
+            # Update the influencer's data in the database
+            doc_ref.set(influencer)
+            return {"message": "Product added to influencer successfully"}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+        
+@app.get("/influencers/{username}/product_ids")
+async def get_product_ids(username: str):
+    try:
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            products = influencer.get("products", {})
+            product_ids = list(products.keys()) if isinstance(products, dict) else []
+            return {"product_ids": product_ids}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+
+        
+@app.put("/influencers/{username}/products/{product_id}")
+async def update_product(username: str, product_id: int, updated_product: Product):
+    try:
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            products = influencer.get("products", [])
+
+            # Check if the product_id is within the valid range
+            if product_id < 0 or product_id >= len(products):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Product not found"
+                )
+
+            # Get the existing product
+            existing_product = products[product_id]
+
+            # Update the product with the updated values
+            updated_product_dict = updated_product.dict(exclude_unset=True)
+            existing_product.update(updated_product_dict)
+
+            # Update the influencer's data in the database
+            doc_ref.update({"products": products})
+            return {"message": "Product updated successfully"}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.delete("/influencers/{username}/products/{product_id}")
+async def delete_product(username: str, product_id: int):
+    try:
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            products = influencer.get("products", [])
+
+            # Check if the product_id is within the valid range
+            if product_id < 0 or product_id >= len(products):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Product not found"
+                )
+
+            # Remove the product from the influencer's products list
+            products.pop(product_id)
+
+            # Update the influencer's data in the database
+            doc_ref.update({"products": products})
+            return {"message": "Product deleted successfully"}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.get("/influencers/{username}/products")
+async def get_all_products(username: str):
+    try:
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            products = influencer.get("products", [])
+            product_list = []
+
+            # Iterate over the products and add an identifier
+            for index, product in enumerate(products):
+                product_dict = product.copy()
+                product_dict["id"] = index  # Add an 'id' field to indicate the order
+                product_list.append(product_dict)
+
+            return {"products": product_list}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
 
 @app.post("/logout")
 async def logout(token: str = Depends(oauth2_scheme)):
