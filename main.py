@@ -35,7 +35,7 @@ app = FastAPI()
 
 SECRET_KEY = "inirahasia"  # Replace with your own secret key
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Set the expiration time for the access token (in minutes)
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # Set the expiration time for the access token (in minutes)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
@@ -69,6 +69,10 @@ class Product(BaseModel):
     price: float
     to_do: List[str]
     social_media_type: str
+
+class Order(BaseModel):
+    influencer_username: str
+    product_id: int
 
 # User authentication functions
 def verify_password(plain_password, hashed_password):
@@ -452,6 +456,114 @@ async def get_all_products(username: str):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.post("/add_influencer_order/{influencer_username}")
+async def add_influencer_order(
+    influencer_username: str,
+    order_data: dict,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Check if the authenticated user is a business owner
+        if token.get("type") != "business_owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to place orders"
+            )
+
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(influencer_username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            products = influencer.get("products", [])
+
+            # Find the product by name
+            product_name = order_data.get("name")
+            selected_product = None
+            for product in products:
+                if product.get("name") == product_name:
+                    selected_product = product
+                    break
+
+            # Check if the product is found
+            if selected_product is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Product not found"
+                )
+
+            # Retrieve the business owner
+            business_owner = get_user_by_username(token.get("sub"), "business_owners")
+
+            # Store the order data in Firestore
+            order = {
+                "order_id": str(uuid.uuid4()),
+                "influencer_username": influencer_username,
+                "product_name": product_name,
+                "business_owner": token.get("sub"),
+                "payment_status": "pending"
+            }
+            doc_ref = db.collection("orders").document(order.get("order_id"))
+            doc_ref.set(order)
+
+            return {
+                "message": "Order placed successfully",
+                "order": order,
+                "business_owner": business_owner
+            }
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.put("/update_order_payment/{order_id}")
+async def update_order_payment(order_id: str, payment_status: str, token: dict = Depends(get_current_user)):
+    try:
+        # Check if the authenticated user is a business owner
+        if token.get("type") != "business_owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to update order payment"
+            )
+
+        # Retrieve the order
+        doc_ref = db.collection("orders").document(order_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            order = doc.to_dict()
+
+            # Check if the order belongs to the authenticated user
+            if order.get("business_owner_username") != token.get("sub"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not authorized to update payment for this order"
+                )
+
+            # Update the payment status
+            order["payment_status"] = payment_status
+
+            # Update the order in the database
+            doc_ref.set(order)
+            return {"message": "Order payment updated successfully"}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
         )
 
     except JWTError:
