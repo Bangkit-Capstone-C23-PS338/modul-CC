@@ -76,6 +76,11 @@ class Order(BaseModel):
     influencer_username: str
     product_id: int
 
+class Review(BaseModel):
+    order_id: str
+    rating: int
+    comment: str
+
 # User authentication functions
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -629,7 +634,77 @@ async def update_payment(
             detail="Invalid token"
         )
 
+# Add the following function to handle adding order reviews
+@app.post("/order/review/{order_id}")
+async def add_order_review(
+    order_id: str,
+    review: Review,
+    token: str = Depends(get_current_user)
+):
+    
+    if token.get("type") != "business_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to add reviews"
+        )
+    
+    # Retrieve the order
+    doc_ref = db.collection("orders").document(order_id)
+    doc = doc_ref.get()
+    if doc.exists:
+        order = doc.to_dict()
 
+        # Check if the order belongs to the authenticated business owner
+        if order.get("business_owner") != token.get("sub"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to add reviews to this order"
+            )
+
+        # Add the review to the order
+        if len(order.get("review", {})) == 0:
+            order["review"] = review.dict()
+            doc_ref.update(order)
+            return {"message": "Review added successfully"}
+        
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You have already added a review to this order"
+        )
+    
+@app.get("/order/review/{order_id}")
+async def get_order_review(
+    order_id: str,
+    token: str = Depends(get_current_user)
+):
+    if token.get("type") != "business_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to view reviews"
+        )
+    
+    # Retrieve the order
+    doc_ref = db.collection("orders").document(order_id)
+    doc = doc_ref.get()
+    if doc.exists:
+        order = doc.to_dict()
+
+        # Check if the order belongs to the authenticated business owner
+        if order.get("business_owner") != token.get("sub"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to view reviews for this order"
+            )
+
+        # Retrieve the review
+        review = order.get("review", {})
+        if len(review) > 0:
+            return review
+        
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No review found for this order"
+        )
 
 @app.post("/logout")
 async def logout(token: str = Depends(oauth2_scheme)):
