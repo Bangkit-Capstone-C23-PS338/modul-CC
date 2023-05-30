@@ -66,11 +66,13 @@ class Influencer(BaseModel):
     
 class Product(BaseModel):
     name: str
+    description: str
     price: float
     to_do: List[str]
     social_media_type: str
 
 class Order(BaseModel):
+    order_id: str
     influencer_username: str
     product_id: int
 
@@ -319,6 +321,11 @@ async def add_product_to_influencer(
                 influencer["products"] = []
             # Add the product to the influencer's products list
             product_dict = product.dict()
+            if len(influencer["products"]) == 0:
+                product_dict["product_id"] = 0
+            else:
+                product_dict["product_id"] = influencer["products"][-1]["product_id"] + 1
+
             influencer["products"].append(product_dict)
             # Update the influencer's data in the database
             doc_ref.set(influencer)
@@ -335,6 +342,7 @@ async def add_product_to_influencer(
             detail="Invalid token"
         )
         
+#For debugging purposes
 @app.get("/influencers/{username}/product_ids")
 async def get_product_ids(username: str):
     try:
@@ -380,9 +388,12 @@ async def update_product(username: str, product_id: int, updated_product: Produc
             # Get the existing product
             existing_product = products[product_id]
 
-            # Update the product with the updated values
-            updated_product_dict = updated_product.dict(exclude_unset=True)
-            existing_product.update(updated_product_dict)
+            # Update the product with the provided fields (partial update)
+            updated_product_data = updated_product.dict(exclude_unset=True)
+            existing_product.update(updated_product_data)
+
+            # Assign the updated product back to the list
+            products[product_id] = existing_product
 
             # Update the influencer's data in the database
             doc_ref.update({"products": products})
@@ -398,6 +409,8 @@ async def update_product(username: str, product_id: int, updated_product: Produc
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
+
+
 
 @app.delete("/influencers/{username}/products/{product_id}")
 async def delete_product(username: str, product_id: int):
@@ -452,6 +465,44 @@ async def get_all_products(username: str):
                 product_list.append(product_dict)
 
             return {"products": product_list}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    
+@app.get("/influencers/{username}/products/{product_id}")
+async def get_product(username: str, product_id: int):
+    try:
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(username)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+            products = influencer.get("products", [])
+
+            # Check if the product_id is within the valid range
+            if product_id < 0 or product_id >= len(products):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Product not found"
+                )
+
+            # Get the product
+            product = products[product_id]
+
+            ig_uname = influencer.get("ig_username")
+            ig_foll = influencer.get("ig_followers")
+
+            product["ig_uname"] = ig_uname
+            product["ig_foll"] = ig_foll
+            return (product)
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -531,14 +582,18 @@ async def add_influencer_order(
             detail="Invalid token"
         )
 
-@app.put("/update_order_payment/{order_id}")
-async def update_order_payment(order_id: str, payment_status: str, token: dict = Depends(get_current_user)):
+@app.put("/update_payment/{order_id}")
+async def update_payment(
+    order_id: str,
+    payment_update: dict,
+    token: dict = Depends(get_current_user)
+):
     try:
         # Check if the authenticated user is a business owner
         if token.get("type") != "business_owner":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorized to update order payment"
+                detail="You are not authorized to update payments"
             )
 
         # Retrieve the order
@@ -547,19 +602,21 @@ async def update_order_payment(order_id: str, payment_status: str, token: dict =
         if doc.exists:
             order = doc.to_dict()
 
-            # Check if the order belongs to the authenticated user
-            if order.get("business_owner_username") != token.get("sub"):
+            # Check if the order belongs to the authenticated business owner
+            if order.get("business_owner") != token.get("sub"):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You are not authorized to update payment for this order"
+                    detail="You are not authorized to update this order"
                 )
 
             # Update the payment status
+            payment_status = payment_update.get("payment_status")
             order["payment_status"] = payment_status
 
             # Update the order in the database
-            doc_ref.set(order)
-            return {"message": "Order payment updated successfully"}
+            doc_ref.update(order)
+
+            return {"message": "Payment updated successfully"}
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -571,6 +628,7 @@ async def update_order_payment(order_id: str, payment_status: str, token: dict =
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
+
 
 
 @app.post("/logout")
