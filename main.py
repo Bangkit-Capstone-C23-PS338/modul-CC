@@ -349,7 +349,7 @@ async def add_product_to_influencer(
         
 #For debugging purposes
 @app.get("/influencers/{username}/product_ids")
-async def get_product_ids(username: str):
+async def get_product_ids(username: str, token: dict = Depends(get_current_user)):
     try:
         # Retrieve the influencer
         doc_ref = db.collection("influencers").document(username)
@@ -374,7 +374,7 @@ async def get_product_ids(username: str):
 
         
 @app.put("/influencers/{username}/products/{product_id}")
-async def update_product(username: str, product_id: int, updated_product: Product):
+async def update_product(username: str, product_id: int, updated_product: Product, token: dict = Depends(get_current_user)):
     try:
         # Retrieve the influencer
         doc_ref = db.collection("influencers").document(username)
@@ -418,7 +418,7 @@ async def update_product(username: str, product_id: int, updated_product: Produc
 
 
 @app.delete("/influencers/{username}/products/{product_id}")
-async def delete_product(username: str, product_id: int):
+async def delete_product(username: str, product_id: int, token: dict = Depends(get_current_user)):
     try:
         # Retrieve the influencer
         doc_ref = db.collection("influencers").document(username)
@@ -453,7 +453,7 @@ async def delete_product(username: str, product_id: int):
         )
 
 @app.get("/influencers/{username}/products")
-async def get_all_products(username: str):
+async def get_all_products(username: str, token: dict = Depends(get_current_user)):
     try:
         # Retrieve the influencer
         doc_ref = db.collection("influencers").document(username)
@@ -483,7 +483,7 @@ async def get_all_products(username: str):
         )
     
 @app.get("/influencers/{username}/products/{product_id}")
-async def get_product(username: str, product_id: int):
+async def get_product(username: str, product_id: int, token: dict = Depends(get_current_user)):
     try:
         # Retrieve the influencer
         doc_ref = db.collection("influencers").document(username)
