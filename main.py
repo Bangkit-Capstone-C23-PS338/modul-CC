@@ -63,6 +63,8 @@ class Influencer(BaseModel):
     yt_username: str
     yt_followers: int
     products: List[str] = []
+    address: str
+    photo_profile_url: str
     
 class Product(BaseModel):
     name: str
@@ -70,11 +72,25 @@ class Product(BaseModel):
     price: float
     to_do: List[str]
     social_media_type: str
+    posting_date: datetime
 
 class Order(BaseModel):
     order_id: str
+    order_date: datetime
     influencer_username: str
+    Business_owner: str
     product_id: int
+    product_name: str
+    product_type: str
+    product_link: str
+    sender_address: str
+    receiver_address: str
+    order_courier: str
+    payment_method: str
+    payment_status: str
+    brief: str
+    payment_date: datetime
+    selected_package: Product
 
 class Review(BaseModel):
     order_id: str
@@ -185,7 +201,12 @@ async def register_influencer(influencer: Influencer = Body(...)):
     userid = str(uuid.uuid4())
     influencer_dict["userid"] = userid
 
-    # Save the influencer data to the database
+    doc_ref = db.collection("influencers").document(influencer.username)
+    doc = doc_ref.get()
+    if doc.exists:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Influencer already exists")
+    
+        # Save the influencer data to the database
     doc_ref = db.collection("influencers").document(influencer.username)
     doc_ref.set(influencer_dict)
     return {"message": "Influencer registered successfully"}
@@ -288,8 +309,13 @@ async def get_influencers_by_username(username: str, token: str = Depends(get_cu
         # Retrieve influencers by username
         influencers = []
         influencers_ref = db.collection("influencers").where("username", "==", username).stream()
+        # influencers_order = db.collection("orders").where("influencer", "==", username).stream()
+        
         for doc in influencers_ref:
             influencers.append(doc.to_dict())
+        
+        # for doc in influencers_rating:
+        #     influencers.append(doc.to_dict())
 
         return {"influencers": influencers}
     except JWTError:
@@ -562,18 +588,29 @@ async def add_influencer_order(
             # Store the order data in Firestore
             order = {
                 "order_id": str(uuid.uuid4()),
+                "order_date": datetime.now(),
                 "influencer_username": influencer_username,
-                "product_name": product_name,
                 "business_owner": token.get("sub"),
-                "payment_status": "pending"
-            }
+                "product_name": product_name,
+                "product_type": order_data.get("product_type"),
+                "product_link": order_data.get("product_link"),
+                "sender_address": order_data.get("sender_address"),
+                "receiver_address": influencer.get("address"),
+                "order_courier": order_data.get("courier"),
+                "payment_method": order_data.get("payment_method"),
+                "brief": order_data.get("brief"),
+                "payment_status": "pending",
+                "payment_date": None,
+                "selected_package": selected_product            
+                
+                }
+            
             doc_ref = db.collection("orders").document(order.get("order_id"))
             doc_ref.set(order)
 
             return {
                 "message": "Order placed successfully",
-                "order": order,
-                "business_owner": business_owner
+                "order": order
             }
 
         raise HTTPException(
@@ -617,6 +654,7 @@ async def update_payment(
             # Update the payment status
             payment_status = payment_update.get("payment_status")
             order["payment_status"] = payment_status
+            order["payment_date"] = datetime.now()
 
             # Update the order in the database
             doc_ref.update(order)
@@ -704,6 +742,164 @@ async def get_order_review(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No review found for this order"
+        )
+
+@app.get("/orders_business_owner/{business_owner}")
+async def get_orders_business_owner(
+    business_owner: str,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Check if the authenticated user is a business owner
+        if token.get("type") != "business_owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to view orders"
+            )
+
+        # Retrieve the business owner
+        doc_ref = db.collection("business_owners").document(business_owner)
+        doc = doc_ref.get()
+        if doc.exists:
+            business_owner = doc.to_dict()
+
+            # Check if the order belongs to the authenticated business owner
+            if business_owner.get("username") != token.get("sub"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not authorized to view orders for this business owner"
+                )
+
+            # Retrieve the orders
+            orders = []
+            docs = db.collection("orders").where("business_owner", "==", business_owner.get("username")).stream()
+            for doc in docs:
+                order = doc.to_dict()
+                order["order_date"] = order["order_date"].strftime("%d/%m/%Y %H:%M:%S")
+                if order.get("payment_date"):
+                    order["payment_date"] = order["payment_date"].strftime("%d/%m/%Y %H:%M:%S")
+                orders.append(order)
+
+            return {"orders": orders}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Business owner not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.get("/orders_influencer/{influencer}")
+async def get_orders_influencer(
+    influencer: str,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Check if the authenticated user is an influencer
+        if token.get("type") != "influencer":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to view orders"
+            )
+
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(influencer)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+
+            # Check if the order belongs to the authenticated influencer
+            if influencer.get("username") != token.get("sub"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not authorized to view orders for this influencer"
+                )
+
+            # Retrieve the orders
+            orders = []
+            docs = db.collection("orders").where("influencer_username", "==", influencer.get("username")).stream()
+            for doc in docs:
+                order = doc.to_dict()
+                order["order_date"] = order["order_date"].strftime("%d/%m/%Y %H:%M:%S")
+                if order.get("payment_date"):
+                    order["payment_date"] = order["payment_date"].strftime("%d/%m/%Y %H:%M:%S")
+                orders.append(order)
+
+            return {"orders": orders}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.get("/review_influencer/{influencer}")
+async def get_review_influencer(
+    influencer: str,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Retrieve the influencer
+        doc_ref = db.collection("influencers").document(influencer)
+        doc = doc_ref.get()
+        if doc.exists:
+            influencer = doc.to_dict()
+
+            # Retrieve the reviews
+            reviews = []
+            docs = db.collection("orders").where("influencer_username", "==", influencer.get("username")).stream()
+            for doc in docs:
+                order = doc.to_dict()
+                review = order.get("review", {})
+                if len(review) > 0:
+                    review["order_id"] = doc.id
+                    review["order_date"] = order["order_date"].strftime("%d/%m/%Y %H:%M:%S")
+                    reviews.append(review)
+
+            return {"reviews": reviews}
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.get("/get_business_owner/{business_owner}")
+async def get_business_owner(
+    business_owner: str,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Retrieve the business owner
+        doc_ref = db.collection("business_owners").document(business_owner)
+        doc = doc_ref.get()
+        if doc.exists:
+            business_owner = doc.to_dict()
+            return business_owner
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Business owner not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
         )
 
 @app.post("/logout")
