@@ -72,7 +72,6 @@ class Product(BaseModel):
     price: float
     to_do: List[str]
     social_media_type: str
-    posting_date: datetime
 
 class Order(BaseModel):
     order_id: str
@@ -313,9 +312,6 @@ async def get_influencers_by_username(username: str, token: str = Depends(get_cu
         
         for doc in influencers_ref:
             influencers.append(doc.to_dict())
-        
-        # for doc in influencers_rating:
-        #     influencers.append(doc.to_dict())
 
         return {"influencers": influencers}
     except JWTError:
@@ -357,7 +353,11 @@ async def add_product_to_influencer(
             else:
                 product_dict["product_id"] = influencer["products"][-1]["product_id"] + 1
 
+            posting_date = datetime.now()
+            product_dict["posting_date"] = posting_date.strftime("%d/%m/%Y %H:%M:%S")
+            
             influencer["products"].append(product_dict)
+            
             # Update the influencer's data in the database
             doc_ref.set(influencer)
             return {"message": "Product added to influencer successfully"}
@@ -673,76 +673,64 @@ async def update_payment(
         )
 
 # Add the following function to handle adding order reviews
-@app.post("/order/review/{order_id}")
+@app.post("/add_influencer_review/{order_id}")
 async def add_order_review(
     order_id: str,
-    review: Review,
-    token: str = Depends(get_current_user)
+    review_data: dict,
+    token: dict = Depends(get_current_user)
 ):
     
+    # Check if the authenticated user is a business owner
     if token.get("type") != "business_owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to add reviews"
         )
+    order_influencer_db = db.collection("orders").document(order_id)
+    order = order_influencer_db.get()
     
-    # Retrieve the order
-    doc_ref = db.collection("orders").document(order_id)
-    doc = doc_ref.get()
-    if doc.exists:
-        order = doc.to_dict()
+    if order.exists:
+        order = order.to_dict()
 
-        # Check if the order belongs to the authenticated business owner
-        if order.get("business_owner") != token.get("sub"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorized to add reviews to this order"
-            )
+        order_influencer = order.get("influencer_username")
 
-        # Add the review to the order
-        if len(order.get("review", {})) == 0:
-            order["review"] = review.dict()
-            doc_ref.update(order)
-            return {"message": "Review added successfully"}
-        
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You have already added a review to this order"
-        )
-    
-@app.get("/order/review/{order_id}")
-async def get_order_review(
-    order_id: str,
-    token: str = Depends(get_current_user)
-):
-    if token.get("type") != "business_owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to view reviews"
-        )
-    
-    # Retrieve the order
-    doc_ref = db.collection("orders").document(order_id)
-    doc = doc_ref.get()
-    if doc.exists:
-        order = doc.to_dict()
+    doc_order_ref = db.collection("influencers").document(order_influencer)
+    doc_order = doc_order_ref.get()
 
-        # Check if the order belongs to the authenticated business owner
-        if order.get("business_owner") != token.get("sub"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorized to view reviews for this order"
-            )
+    if doc_order.exists:
+        influencer = doc_order.to_dict()
 
-        # Retrieve the review
-        review = order.get("review", {})
-        if len(review) > 0:
-            return review
-        
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No review found for this order"
-        )
+        reviews = influencer.get("reviews")
+
+        if reviews is None:
+            reviews = []
+            reviews.append(review_data)
+            influencer["reviews"] = reviews
+            doc_order_ref.update(influencer)
+        else:
+            data_reviews = []
+            for i in range (len(reviews)):
+                data_reviews.append(reviews[i]["order_id"])
+
+
+            for x in range (len(reviews)):
+                if order_id == data_reviews[x]:
+                    check = False
+                else:
+                    check = True
+
+            if check == True:
+                reviews.append(review_data)
+                influencer["reviews"] = reviews
+                doc_order_ref.update(influencer)
+
+                return {"message": "Review added successfully"}
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You have already added a review for this order"
+                )
+            
 
 @app.get("/orders_business_owner/{business_owner}")
 async def get_orders_business_owner(
@@ -793,8 +781,8 @@ async def get_orders_business_owner(
             detail="Invalid token"
         )
 
-@app.get("/orders_influencer/{influencer}")
-async def get_orders_influencer(
+@app.get("/influencer_orders/{influencer}")
+async def get_influencer_orders(
     influencer: str,
     token: dict = Depends(get_current_user)
 ):
@@ -842,8 +830,8 @@ async def get_orders_influencer(
             detail="Invalid token"
         )
 
-@app.get("/review_influencer/{influencer}")
-async def get_review_influencer(
+@app.get("/influencer_reviews/{influencer}")
+async def get_influencer_review(
     influencer: str,
     token: dict = Depends(get_current_user)
 ):
@@ -855,16 +843,7 @@ async def get_review_influencer(
             influencer = doc.to_dict()
 
             # Retrieve the reviews
-            reviews = []
-            docs = db.collection("orders").where("influencer_username", "==", influencer.get("username")).stream()
-            for doc in docs:
-                order = doc.to_dict()
-                review = order.get("review", {})
-                if len(review) > 0:
-                    review["order_id"] = doc.id
-                    review["order_date"] = order["order_date"].strftime("%d/%m/%Y %H:%M:%S")
-                    reviews.append(review)
-
+            reviews = influencer.get("reviews", [])
             return {"reviews": reviews}
 
         raise HTTPException(
