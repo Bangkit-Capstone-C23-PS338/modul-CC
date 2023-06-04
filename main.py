@@ -86,10 +86,12 @@ class Order(BaseModel):
     receiver_address: str
     order_courier: str
     payment_method: str
-    payment_status: str
+    status: str
     brief: str
     payment_date: datetime
     selected_package: Product
+    posting_date: str
+    content_link: str
 
 class Review(BaseModel):
     order_id: str
@@ -307,13 +309,24 @@ async def get_influencers_by_username(username: str, token: str = Depends(get_cu
     try:
         # Retrieve influencers by username
         influencers = []
-        influencers_ref = db.collection("influencers").where("username", "==", username).stream()
-        # influencers_order = db.collection("orders").where("influencer", "==", username).stream()
+        influencers_ref = db.collection("influencers").document(username).get()
         
-        for doc in influencers_ref:
-            influencers.append(doc.to_dict())
+        if influencers_ref.exists:
+            influencer_review = []
+            for i in influencers_ref.get("reviews"):
+                influencer_review.append(i)
 
+            influencer_rating = []
+            for i in range (len(influencer_review)):
+                influencer_rating.append(influencer_review[i]["rating"])
+            
+            influencer_rating = sum(influencer_rating)/len(influencer_rating)
+
+            influencers.append(influencers_ref.to_dict())
+            influencers[0]["rating"] = influencer_rating
+            
         return {"influencers": influencers}
+    
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     
@@ -346,21 +359,33 @@ async def add_product_to_influencer(
             # Add the 'products' key to the influencer's data if it doesn't exist
             if "products" not in influencer:
                 influencer["products"] = []
+
             # Add the product to the influencer's products list
             product_dict = product.dict()
             if len(influencer["products"]) == 0:
                 product_dict["product_id"] = 0
             else:
-                product_dict["product_id"] = influencer["products"][-1]["product_id"] + 1
+                product_list =[]
 
-            posting_date = datetime.now()
-            product_dict["posting_date"] = posting_date.strftime("%d/%m/%Y %H:%M:%S")
-            
-            influencer["products"].append(product_dict)
-            
-            # Update the influencer's data in the database
-            doc_ref.set(influencer)
-            return {"message": "Product added to influencer successfully"}
+                for x in range (len(influencer["products"])):
+                    product_list.append(influencer["products"][x]["name"])
+
+                for x in range (len(influencer["products"])):
+                    if product_dict["name"] == product_list[x]:
+                        check = False
+                    else:
+                        check = True
+
+                if check == True:
+                    product_dict["product_id"] = influencer["products"][-1]["product_id"] + 1
+                    influencer["products"].append(product_dict)
+                    doc_ref.set(influencer)
+                    return {"message": "Product added to influencer successfully"}
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Product already exists"
+                    )
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -591,7 +616,7 @@ async def add_influencer_order(
                 "order_date": datetime.now(),
                 "influencer_username": influencer_username,
                 "business_owner": token.get("sub"),
-                "product_name": product_name,
+                "product_name": order_data.get("product_name"),
                 "product_type": order_data.get("product_type"),
                 "product_link": order_data.get("product_link"),
                 "sender_address": order_data.get("sender_address"),
@@ -599,10 +624,11 @@ async def add_influencer_order(
                 "order_courier": order_data.get("courier"),
                 "payment_method": order_data.get("payment_method"),
                 "brief": order_data.get("brief"),
-                "payment_status": "pending",
+                "status": "pending",
                 "payment_date": None,
-                "selected_package": selected_product            
-                
+                "selected_package": selected_product,
+                "posting_date": order_data.get("posting_date"),
+                "content_link": None            
                 }
             
             doc_ref = db.collection("orders").document(order.get("order_id"))
@@ -624,10 +650,10 @@ async def add_influencer_order(
             detail="Invalid token"
         )
 
-@app.put("/update_payment/{order_id}")
-async def update_payment(
+@app.put("/update_order/{order_id}")
+async def update_order(
     order_id: str,
-    payment_update: dict,
+    update_data: dict,
     token: dict = Depends(get_current_user)
 ):
     try:
@@ -652,14 +678,16 @@ async def update_payment(
                 )
 
             # Update the payment status
-            payment_status = payment_update.get("payment_status")
-            order["payment_status"] = payment_status
+            order["status"] = update_data.get("status")
             order["payment_date"] = datetime.now()
+
+            # Update the content link
+            order["content_link"] = update_data.get("content_link")
 
             # Update the order in the database
             doc_ref.update(order)
 
-            return {"message": "Payment updated successfully"}
+            return {"message": "order updated successfully"}
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -723,7 +751,6 @@ async def add_order_review(
                 reviews.append(review_data)
                 influencer["reviews"] = reviews
                 doc_order_ref.update(influencer)
-
                 return {"message": "Review added successfully"}
             else:
                 raise HTTPException(
@@ -885,6 +912,33 @@ async def get_business_owner(
 async def logout(token: str = Depends(oauth2_scheme)):
     invalidate_token(token)
     return {"message": "User logged out successfully"}
+
+@app.get("/get_order_details/{order_id}")
+async def get_order_details(
+    order_id: str,
+    token: dict = Depends(get_current_user)
+):
+    try:
+        # Retrieve the order
+        doc_ref = db.collection("orders").document(order_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            order = doc.to_dict()
+            order["order_date"] = order["order_date"].strftime("%d/%m/%Y %H:%M:%S")
+            if order.get("payment_date"):
+                order["payment_date"] = order["payment_date"].strftime("%d/%m/%Y %H:%M:%S")
+            return order
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
 
 # Common error handling
 @app.exception_handler(HTTPException)
