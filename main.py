@@ -359,14 +359,16 @@ async def add_product_to_influencer(
             # Add the 'products' key to the influencer's data if it doesn't exist
             if "products" not in influencer:
                 influencer["products"] = []
-
             # Add the product to the influencer's products list
             product_dict = product.dict()
             if len(influencer["products"]) == 0:
                 product_dict["product_id"] = 0
+                influencer["products"].append(product_dict)
+                # Update the influencer's data in the database
+                doc_ref.set(influencer)
+                return {"message": "Product added to influencer successfully"}
             else:
                 product_list =[]
-
                 for x in range (len(influencer["products"])):
                     product_list.append(influencer["products"][x]["name"])
 
@@ -376,16 +378,17 @@ async def add_product_to_influencer(
                     else:
                         check = True
 
-                if check == True:
-                    product_dict["product_id"] = influencer["products"][-1]["product_id"] + 1
-                    influencer["products"].append(product_dict)
-                    doc_ref.set(influencer)
-                    return {"message": "Product added to influencer successfully"}
-                else:
+                if check == False:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Product already exists"
                     )
+                else:
+                    product_dict["product_id"] = influencer["products"][-1]["product_id"] + 1
+                    influencer["products"].append(product_dict)
+                    # Update the influencer's data in the database
+                    doc_ref.set(influencer)
+                    return {"message": "Product added to influencer successfully"}
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -397,7 +400,7 @@ async def add_product_to_influencer(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
-        
+
 #For debugging purposes
 @app.get("/influencers/{username}/product_ids")
 async def get_product_ids(username: str, token: dict = Depends(get_current_user)):
