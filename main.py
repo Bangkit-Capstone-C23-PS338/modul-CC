@@ -89,7 +89,7 @@ class Order(BaseModel):
     status: str
     brief: str
     payment_date: datetime
-    selected_package: Product
+    selected_product: Product
     posting_date: str
     content_link: str
 
@@ -596,10 +596,10 @@ async def add_influencer_order(
             products = influencer.get("products", [])
 
             # Find the product by name
-            product_name = order_data.get("name")
+            order_product = order_data.get("selected_product")
             selected_product = None
             for product in products:
-                if product.get("name") == product_name:
+                if product.get("name") == order_product:
                     selected_product = product
                     break
 
@@ -629,7 +629,7 @@ async def add_influencer_order(
                 "brief": order_data.get("brief"),
                 "status": "pending",
                 "payment_date": None,
-                "selected_package": selected_product,
+                "selected_product": selected_product,
                 "posting_date": order_data.get("posting_date"),
                 "content_link": None            
                 }
