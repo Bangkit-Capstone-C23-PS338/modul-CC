@@ -599,7 +599,7 @@ async def add_influencer_order(
             order_product = order_data.get("selected_product")
             selected_product = None
             for product in products:
-                if product.get("name") == order_product:
+                if product.get("name") == order_product.get("name"):
                     selected_product = product
                     break
 
