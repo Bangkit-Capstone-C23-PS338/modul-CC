@@ -77,8 +77,7 @@ class Order(BaseModel):
     order_id: str
     order_date: datetime
     influencer_username: str
-    Business_owner: str
-    product_id: int
+    business_owner: str
     product_name: str
     product_type: str
     product_link: str
@@ -438,25 +437,18 @@ async def update_product(username: str, product_id: int, updated_product: Produc
             products = influencer.get("products", [])
 
             # Check if the product_id is within the valid range
-            if product_id < 0 or product_id >= len(products):
-                raise HTTPException(
+            for product in products:
+                if product["product_id"] == product_id:
+                    existing_product = product
+                    updated_product_data = updated_product.dict(exclude_unset=True)
+                    existing_product.update(updated_product_data)
+                    doc_ref.update({"products": products})
+                    return {"message": "Product updated successfully"}
+                else:
+                    raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Product not found"
-                )
-
-            # Get the existing product
-            existing_product = products[product_id]
-
-            # Update the product with the provided fields (partial update)
-            updated_product_data = updated_product.dict(exclude_unset=True)
-            existing_product.update(updated_product_data)
-
-            # Assign the updated product back to the list
-            products[product_id] = existing_product
-
-            # Update the influencer's data in the database
-            doc_ref.update({"products": products})
-            return {"message": "Product updated successfully"}
+                    ) 
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -480,20 +472,18 @@ async def delete_product(username: str, product_id: int, token: dict = Depends(g
         if doc.exists:
             influencer = doc.to_dict()
             products = influencer.get("products", [])
+            
+            for product in products:
+                if product["product_id"] == product_id:
+                    deleted_product = product
+                    products.remove(deleted_product)
+                    doc_ref.update({"products": products})
+                    return {"message": "Product deleted successfully"}
 
-            # Check if the product_id is within the valid range
-            if product_id < 0 or product_id >= len(products):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Product not found"
-                )
-
-            # Remove the product from the influencer's products list
-            products.pop(product_id)
-
-            # Update the influencer's data in the database
-            doc_ref.update({"products": products})
-            return {"message": "Product deleted successfully"}
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -518,10 +508,8 @@ async def get_all_products(username: str, token: dict = Depends(get_current_user
             product_list = []
 
             # Iterate over the products and add an identifier
-            for index, product in enumerate(products):
-                product_dict = product.copy()
-                product_dict["id"] = index  # Add an 'id' field to indicate the order
-                product_list.append(product_dict)
+            for product in products:
+                product_list.append(product)
 
             return {"products": product_list}
 
@@ -624,11 +612,11 @@ async def add_influencer_order(
                 "product_link": order_data.get("product_link"),
                 "sender_address": order_data.get("sender_address"),
                 "receiver_address": influencer.get("address"),
-                "order_courier": order_data.get("courier"),
+                "order_courier": order_data.get("order_courier"),
                 "payment_method": order_data.get("payment_method"),
                 "brief": order_data.get("brief"),
                 "status": "pending",
-                "payment_date": None,
+                "payment_date": datetime.now(),
                 "selected_product": selected_product,
                 "posting_date": order_data.get("posting_date"),
                 "content_link": None            
@@ -682,7 +670,6 @@ async def update_order(
 
             # Update the payment status
             order["status"] = update_data.get("status")
-            order["payment_date"] = datetime.now()
 
             # Update the content link
             order["content_link"] = update_data.get("content_link")
