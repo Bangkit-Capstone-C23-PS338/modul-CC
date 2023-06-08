@@ -307,24 +307,31 @@ async def get_influencers_by_category(category: str, token: str = Depends(get_cu
 async def get_influencers_by_username(username: str, token: str = Depends(get_current_user)):
     try:
         # Retrieve influencers by username
-        influencers = []
+        # influencers = []
         influencers_ref = db.collection("influencers").document(username).get()
         
         if influencers_ref.exists:
-            influencer_review = []
-            for i in influencers_ref.get("reviews"):
-                influencer_review.append(i)
+            influencer = influencers_ref.to_dict()
+            # Retrieve the reviews
+            reviews = influencer.get("reviews", [])
+            if reviews:
+                influencer_review = []
+                for i in influencers_ref.get("reviews"):
+                    influencer_review.append(i)
 
-            influencer_rating = []
-            for i in range (len(influencer_review)):
-                influencer_rating.append(influencer_review[i]["rating"])
+                influencer_rating = []
+                for i in range (len(influencer_review)):
+                    influencer_rating.append(influencer_review[i]["rating"])
+                
+                influencer_rating = sum(influencer_rating)/len(influencer_rating)
+                influencer["rating"] = influencer_rating
             
-            influencer_rating = sum(influencer_rating)/len(influencer_rating)
-
-            influencers.append(influencers_ref.to_dict())
-            influencers[0]["rating"] = influencer_rating
-            
-        return {"influencers": influencers}
+            return {"influencers": influencer}
+        
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Influencer not found"
+        )
     
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -535,22 +542,19 @@ async def get_product(username: str, product_id: int, token: dict = Depends(get_
             products = influencer.get("products", [])
 
             # Check if the product_id is within the valid range
-            if product_id < 0 or product_id >= len(products):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Product not found"
-                )
+            for product in products:
+                if product["product_id"] == product_id:
+                    ig_uname = influencer.get("ig_username")
+                    ig_foll = influencer.get("ig_followers")
 
-            # Get the product
-            product = products[product_id]
-
-            ig_uname = influencer.get("ig_username")
-            ig_foll = influencer.get("ig_followers")
-
-            product["ig_uname"] = ig_uname
-            product["ig_foll"] = ig_foll
-            return (product)
-
+                    product["ig_uname"] = ig_uname
+                    product["ig_foll"] = ig_foll
+                    return (product)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+            
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Influencer not found"
