@@ -1,10 +1,22 @@
 from transformers import TFBertForSequenceClassification
 import tensorflow as tf
 from transformers import BertTokenizer
+from fastapi import FastAPI, Depends, HTTPException, status, Body
 
 # Load the model
 model = TFBertForSequenceClassification.from_pretrained("model/nnmodel")
 tokenizer = BertTokenizer.from_pretrained('indobenchmark/indobert-base-p1')
+
+# Define
+app = FastAPI()
+
+# Get review from database
+all_review = []
+
+# insert influencer reviews from database
+
+
+
 
 def predict_string(input):
     # Tokenize the input texts

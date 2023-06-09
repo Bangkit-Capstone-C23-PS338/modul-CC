@@ -18,6 +18,9 @@ load_dotenv()
 import os
 import json
 
+from main_ML import predict_string
+from ml_deployment import get_owner_score_to_all_influencer, get_influencer_score_for_all_owner
+
 # Set the 'CREDENTIALS' environment variable with a valid JSON string
 os.environ['CREDENTIALS'] = '{"key": "value"}'
 
@@ -96,6 +99,7 @@ class Review(BaseModel):
     order_id: str
     rating: int
     comment: str
+    sentiment: float
 
 # User authentication functions
 def verify_password(plain_password, hashed_password):
@@ -188,7 +192,16 @@ async def register_business_owner(business_owner: BusinessOwner = Body(...)):
     # Save the business owner data to the database
     doc_ref = db.collection("business_owners").document(business_owner.username)
     doc_ref.set(business_owner_dict)
-    return {"message": "Business owner registered successfully"}
+
+    influencers2 = []
+    influencers1 = db.collection("influencers").stream()
+    for influencer in influencers1:
+        influencers2.append(influencer.to_dict())
+
+    score = get_owner_score_to_all_influencer(business_owner.username, influencers2)
+
+
+    return (influencers2, score)
 
 @app.post("/register/influencer")
 async def register_influencer(influencer: Influencer = Body(...)):
@@ -588,10 +601,10 @@ async def add_influencer_order(
             products = influencer.get("products", [])
 
             # Find the product by name
-            order_product = order_data.get("selected_product")
+            order_product = order_data.get("name")
             selected_product = None
             for product in products:
-                if product.get("name") == order_product.get("name"):
+                if product.get("name") == order_product:
                     selected_product = product
                     break
 
@@ -709,11 +722,15 @@ async def add_order_review(
     doc_order_ref = db.collection("influencers").document(order_influencer)
     doc_order = doc_order_ref.get()
     
+    comment = review_data.get("comment")
+
     review_data["time_reviewed"] = datetime.now()
+    review_data["sentiment"] = float(predict_string(comment))
     business_owner_db = db.collection("business_owners").document(token.get("sub"))
     business_owner_ref = business_owner_db.get()
     business_owner_ref = business_owner_ref.to_dict()
     business_name = business_owner_ref.get("company_name")
+
     review_data["company_name"] = business_name
 
     if doc_order.exists:

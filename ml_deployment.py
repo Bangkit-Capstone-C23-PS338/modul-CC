@@ -17,9 +17,9 @@ inf_data = [
     {
         'id': 100,
         'categories': ["Gaming", "Sports", "Lifestyle"],
-        'instagram': 10000000,
-        'youtube': 10000000,
-        'tiktok': 10000000,
+        'ig_followers': 10000000,
+        'yt_followers': 10000000,
+        'tt_followers': 10000000,
         'product': [
             {
                 'id': 1,
@@ -38,8 +38,8 @@ inf_data = [
     {
         'id': 200,
         'categories': ["Technology"],
-        'instagram': 10,
-        'tiktok': 10,
+        'ig_followers': 10,
+        'tt_followers': 10,
         'product': [
             {
                 'id': 1,
@@ -54,9 +54,9 @@ inf_data = [
     {
         'id': 300,
         'categories': ["Gaming", "Sports", "Lifestyle", "Technology"],
-        'instagram': 10000000,
-        'youtube': 10000000,
-        'tiktok': 10000000,
+        'ig_followers': 10000000,
+        'yt_followers': 10000000,
+        'tt_followers': 10000000,
         'product': [
             {
                 'id': 1,
@@ -75,9 +75,9 @@ inf_data = [
     {
         'id': 400,
         'categories': ["Gaming", "Sports", "Lifestyle", "Technology"],
-        'instagram': 10000,
-        'youtube': 10000,
-        'tiktok': 10000,
+        'ig_followers': 10000,
+        'yt_followers': 10000,
+        'tt_followers': 10000,
         'product': [
             {
                 'id': 1,
@@ -136,22 +136,22 @@ reviews = [
 
 
 INF_PROFILE = ['avg_rating', 'pricing_LOW', 'pricing_BELOW_AVG', 'pricing_AVG',
-       'pricing_ABOVE_AVG', 'pricing_HIGH', 'Food and Drinks', 'Sports',
-       'Health', 'Technology', 'Beauty and Fashion', 'Gaming', 'Lifestyle',
-       'Travel', 'Education', 'Entertainment', 'youtube_High', 'youtube_Low',
-       'youtube_Medium', 'tiktok_High', 'tiktok_Low', 'tiktok_Medium',
-       'instagram_High', 'instagram_Low', 'instagram_Medium']
+        'pricing_ABOVE_AVG', 'pricing_HIGH', 'Food and Drinks', 'Sports',
+        'Health', 'Technology', 'Beauty and Fashion', 'Gaming', 'Lifestyle',
+        'Travel', 'Education', 'Entertainment', 'yt_followers_High', 'yt_followers_Low',
+        'yt_followers_Medium', 'tt_followers_High', 'tt_followers_Low', 'tt_followers_Medium',
+        'ig_followers_High', 'ig_followers_Low', 'ig_followers_Medium']
 
 USER_PROFILE = ['pricing_LOW', 'pricing_BELOW_AVG', 'pricing_AVG', 'pricing_ABOVE_AVG',
-       'pricing_HIGH', 'Food and Drinks', 'Sports', 'Health', 'Technology',
-       'Beauty and Fashion', 'Gaming', 'Lifestyle', 'Travel', 'Education',
-       'Entertainment', 'youtube_High', 'youtube_Low', 'youtube_Medium',
-       'tiktok_High', 'tiktok_Low', 'tiktok_Medium', 'instagram_High',
-       'instagram_Low', 'instagram_Medium']
+        'pricing_HIGH', 'Food and Drinks', 'Sports', 'Health', 'Technology',
+        'Beauty and Fashion', 'Gaming', 'Lifestyle', 'Travel', 'Education',
+        'Entertainment', 'yt_followers_High', 'yt_followers_Low', 'yt_followers_Medium',
+        'tt_followers_High', 'tt_followers_Low', 'tt_followers_Medium', 'ig_followers_High',
+        'ig_followers_Low', 'ig_followers_Medium']
 
 CATEGORIES = ['Food and Drinks', 'Sports', 'Health', 'Technology',
-       'Beauty and Fashion', 'Gaming', 'Lifestyle', 'Travel', 'Education',
-       'Entertainment']
+        'Beauty and Fashion', 'Gaming', 'Lifestyle', 'Travel', 'Education',
+        'Entertainment']
 
 import pandas as pd
 
@@ -206,26 +206,26 @@ def get_influencer_recommender_profile(inf_id):
     inf_profile.loc[inf_id][influencer['categories']] = 1
 
     # One hot followers
-    if (influencer.get('youtube', 0) > YOUTUBE_HIGH_THRES):
-        inf_profile.loc[inf_id]['youtube_High'] = 1
-    elif (influencer.get('youtube', 0) > YOUTUBE_LOW_THRES):
-        inf_profile.loc[inf_id]['youtube_Medium'] = 1
+    if (influencer.get('yt_followers', 0) > YOUTUBE_HIGH_THRES):
+        inf_profile.loc[inf_id]['yt_followers_High'] = 1
+    elif (influencer.get('yt_followers', 0) > YOUTUBE_LOW_THRES):
+        inf_profile.loc[inf_id]['yt_followers_Medium'] = 1
     else:
-        inf_profile.loc[inf_id]['youtube_Low'] = 1
+        inf_profile.loc[inf_id]['yt_followers_Low'] = 1
 
-    if (influencer.get('instagram', 0) > INSTAGRAM_HIGH_THRES):
-        inf_profile.loc[inf_id]['instagram_High'] = 1
-    elif (influencer.get('instagram', 0) > INSTAGRAM_LOW_THRES):
-        inf_profile.loc[inf_id]['instagram_Medium'] = 1
+    if (influencer.get('ig_followers', 0) > INSTAGRAM_HIGH_THRES):
+        inf_profile.loc[inf_id]['ig_followers_High'] = 1
+    elif (influencer.get('ig_followers', 0) > INSTAGRAM_LOW_THRES):
+        inf_profile.loc[inf_id]['ig_followers_Medium'] = 1
     else:
-        inf_profile.loc[inf_id]['instagram_Low'] = 1
+        inf_profile.loc[inf_id]['ig_followers_Low'] = 1
     
-    if (influencer.get('tiktok', 0) > TIKTOK_HIGH_THRES):
-        inf_profile.loc[inf_id]['tiktok_High'] = 1
-    elif (influencer.get('tiktok', 0) > TIKTOK_LOW_THRES):
-        inf_profile.loc[inf_id]['tiktok_Medium'] = 1
+    if (influencer.get('tt_followers', 0) > TIKTOK_HIGH_THRES):
+        inf_profile.loc[inf_id]['tt_followers_High'] = 1
+    elif (influencer.get('tt_followers', 0) > TIKTOK_LOW_THRES):
+        inf_profile.loc[inf_id]['tt_followers_Medium'] = 1
     else:
-        inf_profile.loc[inf_id]['tiktok_Low'] = 1
+        inf_profile.loc[inf_id]['tt_followers_Low'] = 1
 
     # Get price categories
     for product in influencer['product']:
@@ -271,9 +271,10 @@ def one_hot_price(products):
 
     return list(set(one_hot))
 
-def get_all_influencer_recommender_profile():
+def get_all_influencer_recommender_profile(influencers):
     # Convert to pandas dataframe
-    df_inf = pd.DataFrame(inf_data).fillna(0)
+    df_inf = pd.DataFrame(influencers).fillna(0)
+    df_inf = df_inf.drop(["photo_profile_url", "ig_username", "password", "email", "address", "reviews", "yt_username", "tt_username"], axis=1)
 
     # Convert categories
     one_hot_categories = pd.get_dummies(df_inf['categories'].apply(pd.Series).stack()).groupby(level=0).sum()
@@ -281,29 +282,31 @@ def get_all_influencer_recommender_profile():
     df_inf = df_inf.drop('categories', axis=1)
 
     # Convert follower count
-    youtube_bin = [0, YOUTUBE_LOW_THRES, YOUTUBE_HIGH_THRES, df_inf['youtube'].max()]
-    tiktok_bin = [0, TIKTOK_LOW_THRES, TIKTOK_HIGH_THRES, df_inf['tiktok'].max()]
-    insta_bin = [0, INSTAGRAM_LOW_THRES, INSTAGRAM_HIGH_THRES, df_inf['instagram'].max()]
+    youtube_bin = [0, YOUTUBE_LOW_THRES, YOUTUBE_HIGH_THRES, 100_000_000_000]
+    tiktok_bin = [0, TIKTOK_LOW_THRES, TIKTOK_HIGH_THRES, 100_000_000_000]
+    insta_bin = [0, INSTAGRAM_LOW_THRES, INSTAGRAM_HIGH_THRES, 100_000_000_000]
 
-    df_inf['youtube'] = pd.cut(df_inf['youtube'],bins=youtube_bin, labels=["Low", "Medium", "High"])  
-    df_inf = one_hot(df_inf, 'youtube') 
+    print (youtube_bin)
 
-    df_inf['tiktok'] = pd.cut(df_inf['tiktok'],bins=tiktok_bin, labels=["Low", "Medium", "High"])  
-    df_inf = one_hot(df_inf, 'tiktok') 
+    df_inf['yt_followers'] = pd.cut(df_inf['yt_followers'],bins=youtube_bin, labels=["Low", "Medium", "High"])  
+    df_inf = one_hot(df_inf, 'yt_followers') 
 
-    df_inf['instagram'] = pd.cut(df_inf['instagram'],bins=insta_bin, labels=["Low", "Medium", "High"])  
-    df_inf = one_hot(df_inf, 'instagram') 
+    df_inf['tt_followers'] = pd.cut(df_inf['tt_followers'],bins=tiktok_bin, labels=["Low", "Medium", "High"])  
+    df_inf = one_hot(df_inf, 'tt_followers') 
+
+    df_inf['ig_followers'] = pd.cut(df_inf['ig_followers'],bins=insta_bin, labels=["Low", "Medium", "High"])  
+    df_inf = one_hot(df_inf, 'ig_followers') 
 
     # Convert pricing
-    df_inf['pricing'] = df_inf['product'].map(one_hot_price)
+    df_inf['pricing'] = df_inf['products'].map(one_hot_price)
     one_hot_pricing = pd.get_dummies(df_inf['pricing'].apply(pd.Series).stack()).groupby(level=0).sum()
     df_inf = pd.concat([df_inf, one_hot_pricing], axis=1)
-    df_inf = df_inf.drop(['product', 'pricing'], axis=1)
+    df_inf = df_inf.drop(['products', 'pricing'], axis=1)
 
     # Get average rating
-    df_inf['avg_rating'] = df_inf['id'].map(get_average_rating)
+    df_inf['avg_rating'] = df_inf['username'].map(get_average_rating)
 
-    df_inf = df_inf.reindex(columns=['id'] + INF_PROFILE).fillna(0).astype(float)
+    df_inf = df_inf.reindex(columns=['username'] + INF_PROFILE).fillna(0).astype(float)
 
     return df_inf
 
@@ -381,12 +384,12 @@ def get_all_user_recommender_profile():
 # get_all_user_recommender_profile()
 
 # Inference according to own_id
-def get_owner_score_to_all_influencer(own_id):
+def get_owner_score_to_all_influencer(own_id, influencers):
     export_path = "recommender-model"
     model = tf.saved_model.load(export_path)
     infer = model.signatures["serving_default"]
 
-    inf_profile = get_all_influencer_recommender_profile()
+    inf_profile = get_all_influencer_recommender_profile(influencers)
     user_profile = get_user_recommender_profile(own_id)
 
     id = inf_profile['id']
@@ -425,9 +428,9 @@ def get_influencer_score_for_all_owner(inf_id):
 # 3. Ada review baru (update score buat semua owner ke 1 influencer)
 
 
-get_owner_score_to_all_influencer(1)
-print()
-get_influencer_score_for_all_owner(100)
+# get_owner_score_to_all_influencer(1)
+# print()
+# get_influencer_score_for_all_owner(100)
 
 
 # get_influencer_scores(1)
