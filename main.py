@@ -708,6 +708,13 @@ async def add_order_review(
 
     doc_order_ref = db.collection("influencers").document(order_influencer)
     doc_order = doc_order_ref.get()
+    
+    review_data["time_reviewed"] = datetime.now()
+    business_owner_db = db.collection("business_owners").document(token.get("sub"))
+    business_owner_ref = business_owner_db.get()
+    business_owner_ref = business_owner_ref.to_dict()
+    business_name = business_owner_ref.get("company_name")
+    review_data["company_name"] = business_name
 
     if doc_order.exists:
         influencer = doc_order.to_dict()
@@ -719,6 +726,7 @@ async def add_order_review(
             reviews.append(review_data)
             influencer["reviews"] = reviews
             doc_order_ref.update(influencer)
+            return {"message": "Review added successfully"}
         else:
             data_reviews = []
             for i in range (len(reviews)):
