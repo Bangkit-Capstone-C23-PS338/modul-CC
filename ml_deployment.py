@@ -1,5 +1,5 @@
 import tensorflow as tf
-MODEL = "recommender-smote-try-simple-I"
+# MODEL = "recommender-smote-try-simple-I"
 
 STAR_WEIGHT = 0.5
 SENTIMENT_WEIGHT = 0.5
@@ -382,11 +382,7 @@ def get_all_user_recommender_profile():
 
 # Inference according to own_id
 def get_owner_score_to_all_influencer(own_id):
-    import tensorflow as tf
-
-    MODEL = "recommender-smote-try-simple-I"
-
-    export_path = f"/recommender-model"
+    export_path = "recommender-model"
     model = tf.saved_model.load(export_path)
     infer = model.signatures["serving_default"]
 
@@ -395,8 +391,8 @@ def get_owner_score_to_all_influencer(own_id):
 
     id = inf_profile['id']
     inputs = [{'inf_feature': tf.convert_to_tensor([inf], dtype=float), 
-              'own_feature': tf.convert_to_tensor(user_profile.values[:, 1:], dtype=float)}
-              for inf in inf_profile.values[:, 1:]]
+                'own_feature': tf.convert_to_tensor(user_profile.values[:, 1:], dtype=float)}
+                for inf in inf_profile.values[:, 1:]]
 
 
     score = []
@@ -405,7 +401,7 @@ def get_owner_score_to_all_influencer(own_id):
         print(f"UserID: {own_id}, Inf ID: {int(id[i])} ->", infer(**data)['dot_2'].numpy()[0, 0])
 
 def get_influencer_score_for_all_owner(inf_id):
-    export_path = f"/recommender-model"
+    export_path = "recommender-model"
     model = tf.saved_model.load(export_path)
     infer = model.signatures["serving_default"]
 
@@ -414,8 +410,8 @@ def get_influencer_score_for_all_owner(inf_id):
 
     id = user_profile['id'].values
     inputs = [{'inf_feature': tf.convert_to_tensor(inf_profile.values, dtype=float), 
-              'own_feature': tf.convert_to_tensor([owner], dtype=float)}
-              for owner in user_profile.values[:, 1:]]
+                'own_feature': tf.convert_to_tensor([owner], dtype=float)}
+                for owner in user_profile.values[:, 1:]]
     
     score = []
     for i, data in enumerate(inputs):
