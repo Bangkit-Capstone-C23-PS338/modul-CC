@@ -652,36 +652,33 @@ async def update_order(
     token: dict = Depends(get_current_user)
 ):
     try:
-        # Check if the authenticated user is a business owner
-        if token.get("type") != "business_owner":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorized to update payments"
-            )
-
         # Retrieve the order
         doc_ref = db.collection("orders").document(order_id)
         doc = doc_ref.get()
         if doc.exists:
             order = doc.to_dict()
-
-            # Check if the order belongs to the authenticated business owner
-            if order.get("business_owner") != token.get("sub"):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You are not authorized to update this order"
-                )
-
-            # Update the payment status
-            order["status"] = update_data.get("status")
-
-            # Update the content link
-            order["content_link"] = update_data.get("content_link")
-
-            # Update the order in the database
-            doc_ref.update(order)
-
-            return {"message": "order updated successfully"}
+            user_type = token.get("type")
+            
+            if update_data.get("status"):
+                if user_type == "business_owner" and order.get("business_owner") == token.get("sub"):
+                    # Update the payment status
+                    order["status"] = update_data.get("status")
+                    # Update the order in the database
+                    doc_ref.update(order)
+                    return {"message": "Order updated successfully",
+                            "user_type" : user_type}
+            elif update_data.get("content_link"):
+                if user_type == "influencer" and order.get("influencer_username") == token.get("sub"):
+                    # Update the content link
+                    order["content_link"] = update_data.get("content_link")
+                    # Update the order in the database
+                    doc_ref.update(order)
+                    return {"message": "Order updated successfully",
+                            "user_type" : user_type}
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not authorized to update this order"
+            )
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
