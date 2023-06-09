@@ -659,19 +659,14 @@ async def update_order(
             order = doc.to_dict()
             user_type = token.get("type")
             
-            if user_type == "business_owner" and order.get("business_owner") == token.get("sub"):
+            if (user_type == "business_owner" and order.get("business_owner") == token.get("sub")) or (user_type == "influencer" and order.get("influencer_username") == token.get("sub")):
                 # Update the payment status
                 order["status"] = update_data.get("status")
-                # Update the order in the database
-                doc_ref.update(order)
-                return {"message": "Order status updated successfully",
-                        "user_type" : user_type}
-            if user_type == "influencer" and order.get("influencer_username") == token.get("sub"):
                 # Update the content link
                 order["content_link"] = update_data.get("content_link")
                 # Update the order in the database
                 doc_ref.update(order)
-                return {"message": "Order content link updated successfully",
+                return {"message": "Order updated successfully",
                         "user_type" : user_type}
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
