@@ -932,6 +932,25 @@ async def get_order_details(
             detail="Invalid token"
         )
 
+@app.get("/get_all_business_owners")
+async def get_all_business_owners(
+):
+    try:
+        # Retrieve the business owners
+        business_owners = []
+        docs = db.collection("business_owners").stream()
+        for doc in docs:
+            business_owner = doc.to_dict()
+            business_owners.append(business_owner)
+
+        return {"business_owners": business_owners}
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
 # Common error handling
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):

@@ -306,7 +306,7 @@ def get_all_influencer_recommender_profile():
     df_inf = df_inf.reindex(columns=['id'] + INF_PROFILE).fillna(0).astype(float)
 
     return df_inf
-    
+
 # def get_all_owner_profile():
 
 def get_combined_rating(rating, sentiment_rating    ):
@@ -386,7 +386,7 @@ def get_owner_score_to_all_influencer(own_id):
 
     MODEL = "recommender-smote-try-simple-I"
 
-    export_path = f"recommender/log/model/savedmodel/{MODEL}/"
+    export_path = f"/recommender-model"
     model = tf.saved_model.load(export_path)
     infer = model.signatures["serving_default"]
 
@@ -405,7 +405,7 @@ def get_owner_score_to_all_influencer(own_id):
         print(f"UserID: {own_id}, Inf ID: {int(id[i])} ->", infer(**data)['dot_2'].numpy()[0, 0])
 
 def get_influencer_score_for_all_owner(inf_id):
-    export_path = f"recommender/log/model/savedmodel/{MODEL}/"
+    export_path = f"/recommender-model"
     model = tf.saved_model.load(export_path)
     infer = model.signatures["serving_default"]
 
