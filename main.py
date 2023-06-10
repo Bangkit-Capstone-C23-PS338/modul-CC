@@ -18,8 +18,8 @@ load_dotenv()
 import os
 import json
 
-from main_ML import predict_string
-from ml_deployment import get_owner_score_to_all_influencer, get_influencer_score_for_all_owner
+from sentiment import predict_string
+from recommender import get_owner_score_to_all_influencer, get_influencer_score_for_all_owner
 
 # Set the 'CREDENTIALS' environment variable with a valid JSON string
 os.environ['CREDENTIALS'] = '{"key": "value"}'
@@ -180,28 +180,45 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # API endpoints
 @app.post("/register/businessowner")
 async def register_business_owner(business_owner: BusinessOwner = Body(...)):
-    # Hash the password
-    hashed_password = get_password_hash(business_owner.password)
-    business_owner_dict = business_owner.dict()
-    business_owner_dict["password"] = hashed_password
+    
+    # Check if the username is already taken
+    if get_user_by_username(business_owner.username, "business_owners"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken")
+    else:
+        # Hash the password
+        hashed_password = get_password_hash(business_owner.password)
+        business_owner_dict = business_owner.dict()
+        business_owner_dict["password"] = hashed_password
 
-    # Generate a random userid
-    userid = str(uuid.uuid4())
-    business_owner_dict["userid"] = userid
+        # Generate a random userid
+        userid = str(uuid.uuid4())
+        business_owner_dict["userid"] = userid
 
-    # Save the business owner data to the database
-    doc_ref = db.collection("business_owners").document(business_owner.username)
-    doc_ref.set(business_owner_dict)
-
-    influencers2 = []
-    influencers1 = db.collection("influencers").stream()
-    for influencer in influencers1:
-        influencers2.append(influencer.to_dict())
-
-    score = get_owner_score_to_all_influencer(business_owner.username, influencers2)
+        # Save the business owner data to the database
+        doc_ref = db.collection("business_owners").document(business_owner_dict["username"])
+        doc_ref.set(business_owner_dict)
 
 
-    return (influencers2, score)
+        # Get all influencers and business owners from the database
+        influencers = db.collection("influencers").stream()
+        influencers_list = []
+        for influencer in influencers:
+            influencers_list.append(influencer.to_dict())
+
+        business_owners = db.collection("business_owners").stream()
+        business_owners_list = []
+        for business_owner in business_owners:
+            business_owners_list.append(business_owner.to_dict())
+
+        # Calculate the score of the business owner to all influencers
+        sorted_score, sorted_influencer = get_owner_score_to_all_influencer(business_owner_dict["username"], influencers_list, business_owners_list)
+        
+        # Save the influencer rank to the database
+        business_owner_dict["influencer_rank"] = sorted_influencer
+        doc_ref = db.collection("business_owners").document(business_owner_dict["username"])
+        doc_ref.set(business_owner_dict)
+
+        return ({"message": "Business owner successfully registered"})
 
 @app.post("/register/influencer")
 async def register_influencer(influencer: Influencer = Body(...)):
@@ -222,6 +239,28 @@ async def register_influencer(influencer: Influencer = Body(...)):
         # Save the influencer data to the database
     doc_ref = db.collection("influencers").document(influencer.username)
     doc_ref.set(influencer_dict)
+
+    # Get all influencers and business owners from the database
+    influencers = db.collection("influencers").stream()
+    influencers_list = []
+    for influencer in influencers:
+        influencers_list.append(influencer.to_dict())
+
+    business_owners = db.collection("business_owners").stream()
+    business_owners_list = []
+    for business_owner in business_owners:
+        business_owners_list.append(business_owner.to_dict())
+
+    #Loop at all owner
+    for owner in business_owners_list:
+        # Calculate the score of the business owner to all influencers
+        sorted_score, sorted_influencer = get_owner_score_to_all_influencer(owner["username"], influencers_list, business_owners_list)
+        
+        # Save the influencer rank to the database
+        owner["influencer_rank"] = sorted_influencer
+        doc_ref = db.collection("business_owners").document(owner["username"])
+        doc_ref.set(owner)
+
     return {"message": "Influencer registered successfully"}
 
 @app.post("/login")
@@ -760,6 +799,28 @@ async def add_order_review(
                 reviews.append(review_data)
                 influencer["reviews"] = reviews
                 doc_order_ref.update(influencer)
+
+                # Get all influencers and business owners from the database
+                influencers = db.collection("influencers").stream()
+                influencers_list = []
+                for influencer in influencers:
+                    influencers_list.append(influencer.to_dict())
+
+                business_owners = db.collection("business_owners").stream()
+                business_owners_list = []
+                for business_owner in business_owners:
+                    business_owners_list.append(business_owner.to_dict())
+
+                #Loop at all owner
+                for owner in business_owners_list:
+                    # Calculate the score of the business owner to all influencers
+                    sorted_score, sorted_influencer = get_owner_score_to_all_influencer(owner["username"], influencers_list, business_owners_list)
+                    
+                    # Save the influencer rank to the database
+                    owner["influencer_rank"] = sorted_influencer
+                    doc_ref = db.collection("business_owners").document(owner["username"])
+                    doc_ref.set(owner)
+
                 return {"message": "Review added successfully"}
             else:
                 raise HTTPException(

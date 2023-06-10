@@ -35,6 +35,6 @@ def predict_string(input):
 
 text_list = ["kamu goblok banget tolol", "you are so clever", "aku senang bertemu denganmu", "kemarin, saya menemukan botol kaca"]
 
-for i in text_list:
-    proba = predict_string(i)
-    print(proba)
+# for i in text_list:
+#     proba = predict_string(i)
+#     print(proba)
