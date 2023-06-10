@@ -5,7 +5,7 @@ import pandas as pd
 
 STAR_WEIGHT = 0.5
 SENTIMENT_WEIGHT = 0.5
-STARTING_PROFILE_SCORE = 0.5
+STARTING_PROFILE_SCORE = 0
 COLD_START_AVG_REVIEW = 0.5
 
 YOUTUBE_HIGH_THRES = 2_000_000
@@ -411,7 +411,7 @@ def one_hot_price(products):
 
 def get_all_influencer_recommender_profile(influencers):
     # Convert to pandas dataframe
-    df_inf = pd.DataFrame(influencers).fillna(0)
+    df_inf = pd.DataFrame(influencers).fillna(STARTING_PROFILE_SCORE)
     df_inf = df_inf.drop(["userid", "photo_profile_url", "ig_username", "password", "email", "address", "reviews", "yt_username", "tt_username"], axis=1)
 
     # Convert categories
@@ -442,15 +442,20 @@ def get_all_influencer_recommender_profile(influencers):
     # Get average rating
     df_inf['avg_rating'] = df_inf['username'].apply(lambda x: get_average_rating(x, influencers))
     df_inf = df_inf.filter(['username'] + INF_PROFILE, axis=1)
-    df_inf = df_inf.reindex(columns=['username'] + INF_PROFILE).fillna(0)
+    df_inf = df_inf.reindex(columns=['username'] + INF_PROFILE).fillna(STARTING_PROFILE_SCORE)
 
     return df_inf
 
-# def get_all_owner_profile():
-
 def get_combined_rating(rating, sentiment_rating):
-    sentiment_rating = sentiment_rating.fillna(1)
+    if (type(sentiment_rating) == pd.Series):
+      sentiment_rating = sentiment_rating.fillna(1)
+    elif (sentiment_rating == None):
+      sentiment_rating = 1
     return STAR_WEIGHT * rating / 5 + SENTIMENT_WEIGHT * sentiment_rating
+
+def get_username_from_company_name(company_name, owners):
+    username = owners[owners['company_name'] == company_name]['username'].values[0]
+    return username
 
 def get_owner_recommender_profile(username, influencers, owners):
     # Get owner
@@ -484,16 +489,15 @@ def get_owner_recommender_profile(username, influencers, owners):
 
         # Get mean of each features as user profile
         owner_profile = owner_profile.groupby('own_username').sum()
-        features_except_categories = list(set(owner_profile.columns) - set(CATEGORIES))
-        owner_profile[features_except_categories] = owner_profile[features_except_categories] / len(owner_reviews)
-        owner_profile[CATEGORIES] = (owner_profile[CATEGORIES] + one_hot_categories) / (len(owner_reviews) + 1)
+        owner_profile[CATEGORIES] = (owner_profile[CATEGORIES] + one_hot_categories)
+        owner_profile = owner_profile / len(owner_reviews)
     else:
         owner_profile = one_hot_categories
 
     # Reorder columns
     owner_profile = owner_profile.filter(OWNER_PROFILE, axis=1)
     owner_profile['username'] = username
-    owner_profile = owner_profile.reindex(columns=['username'] + OWNER_PROFILE).fillna(0)
+    owner_profile = owner_profile.reindex(columns=['username'] + OWNER_PROFILE).fillna(STARTING_PROFILE_SCORE)
 
     return owner_profile
 
@@ -509,8 +513,9 @@ def get_all_owner_recommender_profile(influencers, owners):
     owner_reviews = pd.DataFrame(get_all_reviews(influencers))
     owner_reviews['combined_rating'] = get_combined_rating(owner_reviews['rating'], owner_reviews.get('sentiment', 1))
     owner_reviews = owner_reviews[["company_name", "inf_username", "combined_rating"]]
-    owner_reviews_count = owner_reviews.groupby("company_name").count()['inf_username']
-    owner_reviews_count = owner_reviews_count.reindex(owners['company_name'].unique(), fill_value=0)
+    owner_reviews['own_username'] = owner_reviews['company_name'].map(lambda x: get_username_from_company_name(x, owners))              #### TODO
+    owner_reviews_count = owner_reviews.groupby("own_username").count()['inf_username']
+    owner_reviews_count = owner_reviews_count.reindex(owners['username'], fill_value=0)    
     df_inf = get_all_influencer_recommender_profile(influencers).drop('avg_rating', axis=1)
 
     # Multiply reviews with influencer's features
@@ -519,16 +524,15 @@ def get_all_owner_recommender_profile(influencers, owners):
     owner_profiles = owner_profiles.drop(['username', 'inf_username', 'combined_rating'], axis=1)
 
     # Get mean of each features as user profile
-    owner_profiles = owner_profiles.groupby('company_name').sum()
-    features_except_categories = list(set(owner_profiles.columns) - set(CATEGORIES))
-    owner_profiles[features_except_categories] = owner_profiles[features_except_categories].div(owner_reviews.groupby("company_name").count()['inf_username'], axis=0)
-    owner_profiles = owner_profiles.combine_first(one_hot_categories).fillna(0)
-    owner_profiles[CATEGORIES] = owner_profiles[CATEGORIES].div(owner_reviews_count + 1, axis=0)
+    owner_profiles = owner_profiles.groupby('own_username').sum()
+    owner_profiles = owner_profiles.combine_first(one_hot_categories).fillna(STARTING_PROFILE_SCORE)
+    owner_profiles = owner_profiles.div(owner_reviews_count + 1, axis=0)
+
    
     # Reorder columns
     owner_profiles = owner_profiles.filter(OWNER_PROFILE, axis=1)
-    owner_profiles['company_name'] = owner_profiles.index
-    owner_profiles = owner_profiles.reindex(columns=['company_name'] + OWNER_PROFILE).fillna(0)
+    owner_profiles['own_username'] = owner_profiles.index
+    owner_profiles = owner_profiles.reindex(columns=['own_username'] + OWNER_PROFILE).fillna(STARTING_PROFILE_SCORE)
 
     return owner_profiles
 
@@ -536,44 +540,45 @@ def get_all_owner_recommender_profile(influencers, owners):
 
 # Inference according to own_id
 def get_owner_score_to_all_influencer(username, influencers, owners):
-    # export_path = "recommender-model"
-    # model = tf.saved_model.load(export_path)
-    # infer = model.signatures["serving_default"]
+    export_path = "recommender-model"
+    model = tf.saved_model.load(export_path)
+    infer = model.signatures["serving_default"]
 
     inf_profile = get_all_influencer_recommender_profile(influencers)
     owner_profile = get_owner_recommender_profile(username, influencers, owners)
-    if (owner_profile == None):
-        print("Owner not found")
 
-    id = inf_profile['username']
+    inf_username = inf_profile['username']
     inputs = [{'inf_feature': tf.convert_to_tensor([inf], dtype=float), 
                 'own_feature': tf.convert_to_tensor(owner_profile.values[:, 1:], dtype=float)}
                 for inf in inf_profile.values[:, 1:]]
 
-    print(inputs)
+    score = []
+    for data in inputs:
+        score.append(infer(**data)['dot_2'].numpy()[0, 0])
 
-    # score = []
-    # for i, data in enumerate(inputs):
-    #     score.append(infer(**data))
-    #     print(f"UserID: {own_id}, Inf ID: {int(id[i])} ->", infer(**data)['dot_2'].numpy()[0, 0])
+    sorted_score, sorted_inf = zip(*sorted(zip(score, inf_username), reverse=True))
+    return list(sorted_score), list(sorted_inf)
 
 def get_influencer_score_for_all_owner(username, influencers, owners):
-    # export_path = "recommender-model"
-    # model = tf.saved_model.load(export_path)
-    # infer = model.signatures["serving_default"]
+    export_path = "recommender-model"
+    model = tf.saved_model.load(export_path)
+    infer = model.signatures["serving_default"]
 
     inf_profile = get_influencer_recommender_profile(username, influencers)
     owner_profile = get_all_owner_recommender_profile(influencers, owners)    
 
-    id = owner_profile['company_name'].values
+    own_username = owner_profile['own_username'].values
     inputs = [{'inf_feature': tf.convert_to_tensor(inf_profile.values, dtype=float), 
                 'own_feature': tf.convert_to_tensor([owner], dtype=float)}
                 for owner in owner_profile.values[:, 1:]]
     
-    # score = []
-    # for i, data in enumerate(inputs):
-    #     score.append(infer(**data))
-    #     print(f"UserID: {int(id[i])}, Inf ID: {inf_id} ->", infer(**data)['dot_2'].numpy()[0, 0])
+    # print(inputs)
+
+    score = []
+    for data in inputs:
+      score.append(infer(**data)['dot_2'].numpy()[0, 0])
+
+    return score, own_username
 
 
 # Entar recommender berarti harus update semua data usernya tiap:
@@ -582,6 +587,6 @@ def get_influencer_score_for_all_owner(username, influencers, owners):
 # 3. Ada review baru (update score buat semua owner ke 1 influencer)
 
 
-# get_owner_score_to_all_influencer("burjoni_sirojudin", inf_data, own_data)
-# print()
-get_influencer_score_for_all_owner("acong69", inf_data, own_data)
+print(get_owner_score_to_all_influencer("goto", inf_data, own_data))
+print()
+print(get_influencer_score_for_all_owner("acong69", inf_data, own_data))
