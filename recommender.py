@@ -1,7 +1,5 @@
 import tensorflow as tf
 import pandas as pd
-# MODEL = "recommender-smote-try-simple-I"
-# TODO: Nambahin username dari owner di setiap review
 
 STAR_WEIGHT = 0.5
 SENTIMENT_WEIGHT = 0.5
@@ -221,6 +219,7 @@ def get_owner_recommender_profile(username, influencers, owners):
     one_hot_categories = pd.DataFrame([])
     one_hot_categories['categories'] = [owner.get('categories', [])] 
     one_hot_categories = pd.get_dummies(one_hot_categories['categories'].apply(pd.Series).stack()).groupby(level=0).sum()
+    
 
     # Get user reviews
     owner_reviews = pd.DataFrame(get_review_from_own_company_name(owner['company_name'], influencers))
@@ -237,8 +236,9 @@ def get_owner_recommender_profile(username, influencers, owners):
 
         # Get mean of each features as user profile
         owner_profile = owner_profile.groupby('own_username').sum()
+        one_hot_categories = one_hot_categories.filter(CATEGORIES, axis=1).reindex(columns=CATEGORIES).fillna(STARTING_PROFILE_SCORE)
         owner_profile[CATEGORIES] = (owner_profile[CATEGORIES] + one_hot_categories)
-        owner_profile = owner_profile / len(owner_reviews)
+        owner_profile = owner_profile / (len(owner_reviews)+1)
     else:
         owner_profile = one_hot_categories
 
@@ -335,6 +335,6 @@ def get_influencer_score_for_all_owner(username, influencers, owners):
 # 3. Ada review baru (update score buat semua owner ke 1 influencer)
 
 
-# print(get_owner_score_to_all_influencer("goto", inf_data, own_data))
+# print(get_owner_score_to_all_influencer("seluler15", inf_data, own_data))
 # print()
 # print(get_influencer_score_for_all_owner("acong69", inf_data, own_data))
