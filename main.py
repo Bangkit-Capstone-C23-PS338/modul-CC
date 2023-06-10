@@ -750,83 +750,97 @@ async def add_order_review(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to add reviews"
         )
-    order_influencer_db = db.collection("orders").document(order_id)
-    order = order_influencer_db.get()
+    else:
+        order_influencer_db = db.collection("orders").document(order_id)
+        order = order_influencer_db.get()
     
-    if order.exists:
-        order = order.to_dict()
+        # Check if the order exists
+        if order.exists:
+            order = order.to_dict()
 
-        order_influencer = order.get("influencer_username")
+            order_influencer = order.get("influencer_username")
 
-    doc_order_ref = db.collection("influencers").document(order_influencer)
-    doc_order = doc_order_ref.get()
-    
-    comment = review_data.get("comment")
+            doc_order_ref = db.collection("influencers").document(order_influencer)
+            doc_order = doc_order_ref.get()
+            
+            comment = review_data.get("comment")
 
-    review_data["time_reviewed"] = datetime.now()
-    review_data["sentiment"] = float(predict_string(comment))
-    business_owner_db = db.collection("business_owners").document(token.get("sub"))
-    business_owner_ref = business_owner_db.get()
-    business_owner_ref = business_owner_ref.to_dict()
-    business_name = business_owner_ref.get("company_name")
+            review_data["time_reviewed"] = datetime.now()
+            review_data["sentiment"] = float(predict_string(comment))
+            business_owner_db = db.collection("business_owners").document(token.get("sub"))
+            business_owner_ref = business_owner_db.get()
+            business_owner_ref = business_owner_ref.to_dict()
+            business_name = business_owner_ref.get("company_name")
 
-    review_data["company_name"] = business_name
+            review_data["company_name"] = business_name
 
-    if doc_order.exists:
-        influencer = doc_order.to_dict()
+            # Check if the influencer exists
+            if doc_order.exists:
+                influencer = doc_order.to_dict()
 
-        reviews = influencer.get("reviews")
+                reviews = influencer.get("reviews")
 
-        if reviews is None:
-            reviews = []
-            reviews.append(review_data)
-            influencer["reviews"] = reviews
-            doc_order_ref.update(influencer)
-            return {"message": "Review added successfully"}
-        else:
-            data_reviews = []
-            for i in range (len(reviews)):
-                data_reviews.append(reviews[i]["order_id"])
-
-
-            for x in range (len(reviews)):
-                if order_id == data_reviews[x]:
-                    check = False
+                # Check if the influencer has any reviews
+                if reviews is None:
+                    reviews = []
+                    reviews.append(review_data)
+                    influencer["reviews"] = reviews
+                    doc_order_ref.update(influencer)
+                    return {"message": "Review added successfully"}
                 else:
-                    check = True
+                    data_reviews = []
+                    for i in range (len(reviews)):
+                        data_reviews.append(reviews[i].get("order_id"))
 
-            if check == True:
-                reviews.append(review_data)
-                influencer["reviews"] = reviews
-                doc_order_ref.update(influencer)
 
-                # Get all influencers and business owners from the database
-                influencers = db.collection("influencers").stream()
-                influencers_list = []
-                for influencer in influencers:
-                    influencers_list.append(influencer.to_dict())
+                    for x in range (len(reviews)):
+                        if (order_id == data_reviews[x]):
+                            # Check if the influencer has a review for the order
+                            check = False
+                        else:
+                            check = True
 
-                business_owners = db.collection("business_owners").stream()
-                business_owners_list = []
-                for business_owner in business_owners:
-                    business_owners_list.append(business_owner.to_dict())
+                    # Check if the influencer has a review for the order
+                    if check == True:
+                        reviews.append(review_data)
+                        influencer["reviews"] = reviews
+                        doc_order_ref.update(influencer)
 
-                #Loop at all owner
-                for owner in business_owners_list:
-                    # Calculate the score of the business owner to all influencers
-                    sorted_score, sorted_influencer = get_owner_score_to_all_influencer(owner["username"], influencers_list, business_owners_list)
-                    
-                    # Save the influencer rank to the database
-                    owner["influencer_rank"] = sorted_influencer
-                    doc_ref = db.collection("business_owners").document(owner["username"])
-                    doc_ref.set(owner)
+                        # Get all influencers and business owners from the database
+                        influencers = db.collection("influencers").stream()
+                        influencers_list = []
+                        for influencer in influencers:
+                            influencers_list.append(influencer.to_dict())
 
-                return {"message": "Review added successfully"}
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You have already added a review for this order"
-                )
+                        business_owners = db.collection("business_owners").stream()
+                        business_owners_list = []
+                        for business_owner in business_owners:
+                            business_owners_list.append(business_owner.to_dict())
+
+                        #Loop at all owner
+                        for owner in business_owners_list:
+                            # Calculate the score of the business owner to all influencers
+                            sorted_score, sorted_influencer = get_owner_score_to_all_influencer(owner["username"], influencers_list, business_owners_list)
+                            
+                            # Save the influencer rank to the database
+                            owner["influencer_rank"] = sorted_influencer
+                            doc_ref = db.collection("business_owners").document(owner["username"])
+                            doc_ref.set(owner)
+
+                        return {"message": "Review added successfully"}
+                    # If the influencer has a review for the order, raise an error
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="You have already added a review for this order"
+                        )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
+
+        
             
 
 @app.get("/orders_business_owner/{business_owner}")
