@@ -640,10 +640,10 @@ async def add_influencer_order(
             products = influencer.get("products", [])
 
             # Find the product by name
-            order_product = order_data.get("name")
+            order_product = order_data.get("selected_product")
             selected_product = None
             for product in products:
-                if product.get("name") == order_product:
+                if product.get("name") == order_product.get("name"):
                     selected_product = product
                     break
 
@@ -1036,6 +1036,44 @@ async def get_all_business_owners(
             business_owners.append(business_owner)
 
         return {"business_owners": business_owners}
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+@app.get("/get_BusinessOwner_influencerrank_detail/{business_owner}")
+async def get_BusinessOwner_influencerrank_detail(
+    business_owner: str,
+):
+    try:
+        # Retrieve the business owner
+        doc_ref = db.collection("business_owners").document(business_owner)
+        doc = doc_ref.get()
+        if doc.exists:
+            business_owner = doc.to_dict()
+        
+            # Retrieve the influencer rank
+            influencer_rank = []
+            for influencer in business_owner.get("influencer_rank"):
+                influencer_rank.append(influencer)
+            
+            # From influencer rank, get the influencer detail
+            influencer_details = []
+            for i in range (len(influencer_rank)):
+                doc_ref = db.collection("influencers").document(influencer_rank[i])
+                doc = doc_ref.get()
+                influencer_detail = doc.to_dict()
+                influencer_details.append(influencer_detail)
+
+            return {"influencers": influencer_details}
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business owner not found"
+            )
 
     except JWTError:
         raise HTTPException(
