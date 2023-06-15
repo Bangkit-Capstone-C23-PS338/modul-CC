@@ -72,3 +72,16 @@ This is the API code for the Promosee application. The Promosee API is built usi
 ## Error Handling
 
 The API returns appropriate HTTP status codes and error messages for different scenarios. Make sure to handle errors gracefully in your client applications.
+
+## API Deployment
+- Build Docker Image using Docker from the Dockerfile that has been configured using the tag from Container Registry
+- Push the Docker Image into Container Registry that has been set in our Google Cloud
+- Deploy the Docker Image in the Container Registry using Cloud Run
+
+## Cloud Run Specification
+- Startup CPU Boost Enabled
+- 4 vCPUs
+- 8 GB memory
+- Request Timeout 300s
+- Maximum concurrent requests per instance 80
+- Container port 8080
