@@ -22,7 +22,6 @@ This is the API code for the Promosee application. The Promosee API is built usi
     ```
 3. Install the dependencies:
     ```bash
-    Copy code
     pip install -r requirements.txt
     ```
 4. Set up environment variables:
@@ -33,7 +32,6 @@ This is the API code for the Promosee application. The Promosee API is built usi
     - GOOGLE_APPLICATION_CREDENTIALS: Path to the Google Cloud credentials JSON file.
 5. Start the API server:
     ```bash
-    Copy code
     uvicorn main:app --reload
     ```
     The API server should now be running at http://localhost:8000
