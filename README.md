@@ -12,7 +12,7 @@ This is the API code for the Promosee application. The Promosee API is built usi
 1. Clone the repository:
     ```bash
     git clone https://github.com/Bangkit-Capstone-C23-PS338/modul-CC.git
-    cd repo
+    cd modul-CC
     ```
 
 2. Create a virtual environment (optional but recommended):
@@ -28,7 +28,7 @@ This is the API code for the Promosee application. The Promosee API is built usi
     - Create a .env file in the root directory of the project.
     - Define the following environment variables in the .env file:
     - CREDENTIALS: The credentials for accessing Google Cloud Firestore.
-    - ECRET_KEY: Secret key used for JWT token generation.
+    - SECRET_KEY: Secret key used for JWT token generation.
     - GOOGLE_APPLICATION_CREDENTIALS: Path to the Google Cloud credentials JSON file.
 5. Start the API server:
     ```bash
